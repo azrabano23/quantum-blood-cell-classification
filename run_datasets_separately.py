@@ -27,7 +27,7 @@ class QuantumBloodCellClassifier:
     Quantum Ising Model for Blood Cell Classification
     """
     
-    def __init__(self, n_qubits=8, n_layers=2):
+    def __init__(self, n_qubits=8, n_layers=4):
         self.n_qubits = n_qubits
         self.n_layers = n_layers
         self.device = qml.device('default.qubit', wires=n_qubits)
@@ -42,14 +42,24 @@ class QuantumBloodCellClassifier:
         
         # Define cell type classifications based on medical knowledge
         healthy_cell_types = ['LYT', 'MON', 'NGS', 'NGB']  # Lymphocytes, Monocytes, Neutrophils
-        aml_cell_types = ['MYB', 'MOB', 'MMZ', 'KSC', 'BAS', 'EBO', 'EOS', 'LYA', 'MYO']  # Blasts and abnormal cells
+        aml_cell_types = ['MYB', 'MOB', 'MMZ', 'KSC', 'BAS', 'EBO', 'EOS', 'LYA', 'MYO', 'PMO', 'BLA', 'LYI']  # Blasts and abnormal cells
         
         X, y = [], []
         class_counts = {'healthy': 0, 'aml': 0}
         
         for dirpath, _, filenames in os.walk(dataset_folder):
             # Extract cell type from directory path
-            cell_type = os.path.basename(dirpath)
+            path_parts = dirpath.split(os.sep)
+            cell_type = None
+            
+            # Find the cell type in the path
+            for part in path_parts:
+                if part in healthy_cell_types or part in aml_cell_types:
+                    cell_type = part
+                    break
+            
+            if cell_type is None:
+                continue
             
             for file in filenames:
                 if file.endswith(('.jpg', '.png', '.tiff', '.tif')):
@@ -86,9 +96,20 @@ class QuantumBloodCellClassifier:
                         print(f"   Error loading {file}: {e}")
                         continue
         
+        # Find which cell types were actually loaded
+        healthy_found = []
+        aml_found = []
+        for dirpath, _, _ in os.walk(dataset_folder):
+            path_parts = dirpath.split(os.sep)
+            for part in path_parts:
+                if part in healthy_cell_types and part not in healthy_found:
+                    healthy_found.append(part)
+                elif part in aml_cell_types and part not in aml_found:
+                    aml_found.append(part)
+        
         print(f"   Loaded {len(X)} samples:")
-        print(f"   • Healthy: {class_counts['healthy']} (cell types: {[ct for ct in healthy_cell_types if any(ct in dirpath for dirpath, _, _ in os.walk(dataset_folder))]}")
-        print(f"   • AML: {class_counts['aml']} (cell types: {[ct for ct in aml_cell_types if any(ct in dirpath for dirpath, _, _ in os.walk(dataset_folder))]}")
+        print(f"   • Healthy: {class_counts['healthy']} (cell types: {healthy_found})")
+        print(f"   • AML: {class_counts['aml']} (cell types: {aml_found})")
         
         return np.array(X), np.array(y)
     
@@ -193,7 +214,7 @@ def run_dataset_analysis(dataset_name, dataset_path):
     print("=" * 80)
     
     # Initialize classifier
-    classifier = QuantumBloodCellClassifier(n_qubits=8, n_layers=2)
+    classifier = QuantumBloodCellClassifier(n_qubits=8, n_layers=4)
     
     # Load dataset
     X, y = classifier.load_real_blood_cell_data(dataset_path, max_samples_per_class=100)
