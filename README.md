@@ -4,7 +4,7 @@ This project compares **Variational Quantum Classifier (VQC)** and **Equilibrium
 
 ## **Key Results**
 
-### **MNIST Dataset Results** ⭐
+### **MNIST Dataset Results**
 - **Winner**: **Equilibrium Propagation** 
 - **Test Accuracy**: 49.0% (both methods)
 - **Speed**: EP is faster (60.8s vs 61.3s for 200/100, 297.6s vs 309.6s for 1000/100)
