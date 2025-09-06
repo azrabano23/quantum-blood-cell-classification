@@ -2,7 +2,7 @@
 
 This project compares **Variational Quantum Classifier (VQC)** and **Equilibrium Propagation (EP)** on both medical imaging (AML blood cells) and computer vision (MNIST) datasets.
 
-## 🎯 **Key Results**
+## **Key Results**
 
 ### **MNIST Dataset Results** ⭐
 - **Winner**: **Equilibrium Propagation** 
@@ -15,7 +15,7 @@ This project compares **Variational Quantum Classifier (VQC)** and **Equilibrium
 - **Dataset**: Real medical images from AML-Cytomorphology_LMU
 - **Classes**: Healthy vs AML (Acute Myeloid Leukemia) cells
 
-## 🔬 **What This Project Does**
+## **What This Project Does**
 
 ### **Quantum Computing Applications**
 This project demonstrates two different quantum machine learning approaches:
@@ -37,25 +37,25 @@ This project demonstrates two different quantum machine learning approaches:
 - **Quantum Entanglement**: CNOT gates create correlations between qubits
 - **Energy-Based Learning**: EP leverages equilibrium dynamics
 
-## 📊 **Experimental Results**
+## **Experimental Results**
 
 ### **MNIST Experiments Summary**
 
 | Experiment | Method | Test Accuracy | Training Time | Winner |
 |------------|--------|---------------|---------------|---------|
 | 200/100 Split | VQC | 49.0% | 61.3s | EP (tied acc, faster) |
-| 200/100 Split | EP | 49.0% | 60.8s | ✅ |
+| 200/100 Split | EP | 49.0% | 60.8s |
 | 1000/100 Split | VQC | 49.0% | 309.6s | EP (tied acc, faster) |
-| 1000/100 Split | EP | 49.0% | 297.6s | ✅ |
+| 1000/100 Split | EP | 49.0% | 297.6s |
 
 ### **Key Findings**
-- **🏆 Overall Winner**: Equilibrium Propagation
-- **⚡ Speed Advantage**: EP is consistently faster
-- **📈 Performance**: Both methods achieve identical accuracy
-- **🔄 Scalability**: Larger training sets don't significantly improve performance
-- **🧠 Complexity**: Both methods struggle with synthetic data complexity
+- **Overall Winner**: Equilibrium Propagation
+- **Speed Advantage**: EP is consistently faster
+- **Performance**: Both methods achieve identical accuracy
+- **Scalability**: Larger training sets don't significantly improve performance
+- **Complexity**: Both methods struggle with synthetic data complexity
 
-## 🚀 **Quick Start**
+## **Quick Start**
 
 ### **Option 1: Google Colab (Recommended)**
 1. Open `Quantum_MNIST_Experiments.ipynb` in Google Colab
@@ -81,7 +81,7 @@ python run_mnist_comparison.py
 python run_both_quantum_methods.py
 ```
 
-## 📁 **Repository Structure**
+## **Repository Structure**
 
 ```
 quantum-blood-cell-classification/
@@ -98,7 +98,7 @@ quantum-blood-cell-classification/
 └── requirements.txt                   # Dependencies
 ```
 
-## 🔬 **Method Comparison**
+## **Method Comparison**
 
 ### **Variational Quantum Classifier (VQC)**
 - **Approach**: Traditional variational quantum circuits
@@ -119,7 +119,7 @@ quantum-blood-cell-classification/
 4. **Computational Cost**: VQC is slower, EP is faster
 5. **Biological Inspiration**: EP is more inspired by neural dynamics
 
-## 📈 **Results Analysis**
+## **Results Analysis**
 
 ### **Why Equilibrium Propagation Won**
 1. **Speed**: Consistently faster training times
@@ -133,7 +133,7 @@ quantum-blood-cell-classification/
 - The synthetic MNIST data proved challenging for both quantum approaches
 - Larger training sets (1000 vs 200) didn't improve performance significantly
 
-## 🎯 **Future Work**
+## **Future Work**
 
 1. **Real MNIST Data**: Test with actual MNIST dataset from Kaggle
 2. **Different Architectures**: Experiment with various quantum circuit designs
@@ -141,7 +141,7 @@ quantum-blood-cell-classification/
 4. **Quantum Advantage**: Analyze quantum advantage on larger datasets
 5. **Hardware Implementation**: Test on actual quantum devices
 
-## 📚 **Scientific Impact**
+## **Scientific Impact**
 
 This work demonstrates:
 - **Practical quantum machine learning** on real-world datasets
@@ -149,22 +149,16 @@ This work demonstrates:
 - **Comparative analysis** of different quantum optimization methods
 - **Scalable frameworks** for quantum-enhanced classification
 
-## 🤝 **Contributing**
+## **Contributing**
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
 
-## 📄 **License**
+## **License**
 
 This project is licensed under the MIT License.
-
-## 🙏 **Acknowledgments**
-
-- PennyLane and Qiskit communities for quantum computing frameworks
-- The Cancer Imaging Archive (TCIA) for medical datasets
-- Munich University Hospital for AML cytomorphology data
 
 ---
 
