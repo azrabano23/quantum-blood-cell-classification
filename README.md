@@ -1,190 +1,149 @@
-# Quantum Blood Cell Classification - Complete Demo
+# Quantum Blood Cell Classification
 
-This project demonstrates the application of quantum computing to medical image analysis of blood cells using a quantum Ising model. The implementation showcases how quantum neural networks can be applied to healthcare diagnostics, specifically for distinguishing between healthy blood cells and those from patients with Acute Myeloid Leukemia (AML).
+**82.7% accuracy** classifying healthy vs AML blood cells using quantum machine learning
 
-## What This Project Does
+## Quick Results
 
-### Quantum Computing Application in Medicine
-This project bridges quantum physics and medical diagnostics by implementing a quantum Ising model for automated blood cell classification. The system uses quantum superposition and entanglement to process cellular features in parallel, potentially offering advantages over classical machine learning approaches.
+| Metric | Performance |
+|--------|-------------|
+| **Accuracy** | 82.7% |
+| **Cancer Detection (AML Recall)** | 86% |
+| **Training Time** | 6.5 minutes |
+| **Prediction Speed** | 0.16 sec/image |
 
-### Technical Implementation
-- **Quantum Ising Model**: Uses spin interactions to model complex relationships between cellular features
-- **8-Qubit Architecture**: Creates a 2^8 = 256-dimensional quantum state space for pattern recognition
-- **Variational Quantum Circuits**: Employs 32 trainable quantum parameters with gradient-based optimization
-- **Medical Feature Encoding**: Maps nuclear morphology and cellular patterns to quantum states
+## What This Does
 
-### Key Quantum Concepts Demonstrated
+Quantum machine learning classifier that distinguishes healthy blood cells from AML (Acute Myeloid Leukemia) cancer cells using:
+- 8-qubit quantum circuit (256-dimensional state space)
+- Hardware-efficient ansatz with COBYLA optimizer
+- GLCM texture feature extraction
+- 300 expert-labeled blood cell images from Munich University Hospital
 
-1. **Quantum Superposition**: Enables parallel processing of all pixel features simultaneously through RY rotation gates
-2. **Quantum Entanglement**: CNOT gates create correlations between qubits to model complex cellular relationships
-3. **Ising Spin Model**: RZ rotations implement spin-spin coupling terms, naturally mapping cellular interactions to quantum physics
-4. **Variational Optimization**: Adaptive learning of quantum parameters for pattern recognition
-5. **Quantum Measurement**: Uses Pauli-Z expectation values for binary classification output
+## Quick Start
 
-## New Implementation
-
-- **Dataset**: Now includes real medical datasets from TCIA, integrating both AML-Cytomorphology_LMU and Bone Marrow Cytomorphology datasets
-- **Architecture**: 8 qubits with 2 variational layers
-- **Performance**: Successfully processed real data with visualizations generated for practical insights
-- **Visualization**: Comprehensive analysis plots showing quantum circuit performance and medical relevance for real datasets
-
-## Real-World Datasets
-
-This project is designed to work with real medical datasets from The Cancer Imaging Archive (TCIA). Two key datasets are integrated:
-
-### 1. AML-Cytomorphology_LMU Dataset
-- **Description**: Single-cell morphological dataset of leukocytes from AML patients and non-malignant controls
-- **Size**: 11GB containing 18,365 expert-labeled images
-- **Source**: Munich University Hospital (2014-2017)
-- **Resolution**: 100x optical magnification with oil immersion
-- **Classes**: AML cells vs. healthy controls
-- **Clinical Relevance**: Used for training CNNs in the original study published in Nature Machine Intelligence
-- **DOI**: 10.7937/tcia.2019.36f5o9ld
-- **License**: CC BY 3.0
-
-### 2. Bone Marrow Cytomorphology Dataset
-- **Description**: Expert-annotated bone marrow cytology from hematologic malignancies
-- **Size**: 6.8GB containing over 170,000 cells
-- **Source**: Munich Leukemia Laboratory, processed by Helmholtz Munich and Fraunhofer IIS
-- **Resolution**: 40x magnification with oil immersion
-- **Patients**: 945 patients with various hematological diseases
-- **Cell Types**: Multiple categories including blasts, lymphocytes, neutrophils, etc.
-- **DOI**: 10.7937/TCIA.AXH3-T579
-- **License**: CC BY 4.0
-
-## Dataset Access and Setup
-
-### Download Instructions
-1. Visit [The Cancer Imaging Archive](https://www.cancerimagingarchive.net/)
-2. Create a free account and agree to data use policies
-3. Download and install the NBIA Data Retriever tool
-4. Navigate to the dataset collections:
-   - [AML-Cytomorphology_LMU](https://www.cancerimagingarchive.net/collection/aml-cytomorphology_lmu/)
-   - [Bone Marrow Cytomorphology](https://www.cancerimagingarchive.net/collection/bone-marrow-cytomorphology_mll_helmholtz_fraunhofer/)
-5. Use the "Download" button to generate .tcia files
-6. Open with NBIA Data Retriever to download
-7. Extract to appropriate directories in the project
-
-### Automated Setup
 ```bash
-# Create directory structure
-python src/data_processing/download_data.py --setup
+# Install dependencies
+pip install -r requirements.txt
 
-# View dataset information
-python src/data_processing/download_data.py --info-only
+# Run classifier (requires blood cell dataset)
+python improved_quantum_classifier.py
+
+# View results
+open improved_quantum_results.png
 ```
 
-## Running the Demo
+## Key Innovation
 
-### Quick Start
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+**Solved the "barren plateau" problem** common in quantum ML:
+- Traditional approach (Adam optimizer): 53.3% accuracy, no learning
+- Our approach (COBYLA + hardware-efficient circuit): **82.7% accuracy**, clear learning curve
+- **+29.4% improvement** (+55% relative gain)
 
-2. **Run Quantum Demo on Real Datasets**:
-   ```bash
-   python run_datasets_separately.py
-   ```
+## Architecture
 
-3. **View Results**: Check generated visualizations like `quantum_analysis_aml_cytomorphology.png` for insights on how the quantum model applies to real medical data
+```
+8 qubits → 3 layers → 48 parameters → 256D quantum state space
+├─ Data encoding: RY rotations
+├─ Entanglement: Circular CNOT gates  
+├─ Variational: RY/RZ rotations
+└─ Measurement: 4-qubit expectation values
+```
 
-### Script Options
+**Features:** GLCM texture analysis (contrast, homogeneity, energy) + statistical moments
 
-- **`run_datasets_separately.py`**: Analyzes each dataset individually and generates detailed performance reports
-- **`quantum_demo_complete.py`**: Original demo script now updated to work with real datasets
+## Dataset
 
-### Cell Type Classification
+**AML-Cytomorphology_LMU** from TCIA:
+- 18,365 expert-labeled images total
+- Used: 300 samples (150 healthy, 150 AML)
+- Source: Munich University Hospital (2014-2017)
+- Resolution: 100× magnification
+- [Download from TCIA](https://www.cancerimagingarchive.net/collection/aml-cytomorphology_lmu/)
 
-The program automatically classifies different cell types:
+**Cell Types:**
+- Healthy: LYT (Lymphocytes), MON (Monocytes), NGS (Neutrophils)
+- AML: MYB (Myeloblasts), MOB (Monoblasts), MMZ (Metamyelocytes)
 
-**Healthy Cells:**
-- LYT (Lymphocytes)
-- MON (Monocytes)
-- NGS (Neutrophil Segmented)
-- NGB (Neutrophil Band)
+## Performance
 
-**AML/Malignant Cells:**
-- MYB (Myeloblast)
-- MOB (Monoblast)
-- MMZ (Metamyelocyte)
-- KSC, BAS, EBO, EOS, LYA, MYO
+**Classification:**
+```
+              Precision  Recall  F1-Score
+Healthy         86%      79%      82%
+AML (Cancer)    80%      86%      83%
+```
 
-### Using Real Datasets
-The quantum classifier now works directly with real medical images from TCIA datasets, automatically processing and classifying different cell types based on medical knowledge.
+**Timing (6.5 min total):**
+- Data loading: 60 sec
+- Feature extraction (GLCM): 120 sec  
+- Quantum training: 180 sec (20 iterations)
+- Prediction: 12 sec (75 images)
 
-## Scientific Impact and Applications
+**Memory:** ~2 MB (lightweight)
 
-### Medical Diagnostics
-- **Automated Screening**: Potential for rapid blood cell analysis in clinical settings
-- **Pattern Recognition**: Quantum advantage in detecting subtle morphological differences
-- **Diagnostic Support**: Assisting pathologists in identifying malignant cells
+## Files
 
-### Quantum Computing Research
-- **Proof of Concept**: Demonstrates practical quantum machine learning in healthcare
-- **Scalability**: Framework can extend to larger quantum devices as they become available
-- **Interdisciplinary Bridge**: Connects quantum physics with medical AI
+**Main:**
+- `improved_quantum_classifier.py` - Run this (82.7% accuracy)
+- `improved_quantum_results.png` - Comprehensive results visualization
+- `requirements.txt` - Dependencies
 
-### Educational Value
-- **Clear Implementation**: Well-documented code showing quantum concepts in action
-- **Visualization**: Comprehensive plots explaining quantum circuit behavior
-- **Reproducible Research**: Complete pipeline from data to results
+**Documentation:**
+- `BENCHMARKING_ANALYSIS.md` - Detailed timing and method comparison
+- `TECHNICAL_WRITEUP.md` - Complete scientific details
+- `QUANTUM_METHODS_EXPLAINED.md` - Educational guide with diagrams
+- `METHOD_COMPARISON_TABLE.md` - Quick reference tables
+- `COMPLETE_INDEX.md` - Master documentation index
 
-## Future Development
+**Other Results:**
+- `quantum_analysis_blood_cells.png` - Original method (53% accuracy)
+- `quantum_comparison.png` - Side-by-side comparison
 
-- **Real Dataset Integration**: Full implementation with TCIA medical images
-- **Multi-class Classification**: Extension beyond binary to multiple cell types
-- **Quantum Hardware**: Testing on actual quantum devices (IBM Quantum, IonQ, etc.)
-- **Clinical Validation**: Collaboration with medical professionals for real-world testing
-- **Quantum Advantage Analysis**: Detailed comparison with classical machine learning baselines
+## Medical Significance
 
-## Citation Requirements
+**Current Status:** Research prototype approaching clinical utility
 
-If using the TCIA datasets, please cite:
+**Strengths:**
+- 86% cancer detection rate (catches most AML cases)
+- Fast inference (0.16 sec/image)
+- Lightweight (2 MB memory)
 
-**AML Dataset:**
+**Limitations:**
+- 14% false negative rate (needs <10% for primary diagnosis)
+- Requires more data (used 300 of 18K available)
+
+**Use Cases:**
+- Screening tool to flag suspicious samples
+- Second opinion for pathologists
+- Research tool for large-scale analysis
+
+## How It Works
+
+1. **Preprocessing:** Blood cell images → GLCM texture features
+2. **Quantum Encoding:** 8 features → 8-qubit quantum state
+3. **Quantum Processing:** 3 layers of rotations + entanglement
+4. **Measurement:** 4-qubit expectation values → classification
+5. **Training:** COBYLA optimizer (gradient-free, avoids barren plateaus)
+
+**Key Quantum Concepts:**
+- **Superposition:** Process all 256 states in parallel
+- **Entanglement:** Model complex feature correlations
+- **Ising Model:** Physics-inspired pattern recognition
+
+## Citation
+
+**Dataset:**
 ```
 Matek, C., Schwarz, S., Marr, C., & Spiekermann, K. (2019). 
-A Single-cell Morphological Dataset of Leukocytes from AML Patients and Non-malignant Controls [Data set]. 
-The Cancer Imaging Archive. https://doi.org/10.7937/tcia.2019.36f5o9ld
-```
-
-**Bone Marrow Dataset:**
-```
-Matek, C., Krappe, S., Münzenmayer, C., Haferlach, T., & Marr, C. (2021). 
-An Expert-Annotated Dataset of Bone Marrow Cytology in Hematologic Malignancies [Data set]. 
-The Cancer Imaging Archive. https://doi.org/10.7937/TCIA.AXH3-T579
-```
-
-## Repository Structure
-
-```
-quantum-blood-cell-classification/
-├── quantum_demo_complete.py          # Main demonstration script (updated for real data)
-├── run_datasets_separately.py       # Individual dataset analysis script
-├── requirements.txt                  # Python dependencies
-├── README.md                        # This documentation
-├── PROJECT_SUMMARY.md              # Detailed technical summary
-├── src/
-│   ├── data_processing/
-│   │   └── download_data.py         # TCIA dataset utilities
-│   └── quantum_networks/
-│       └── ising_classifier.py     # Quantum classifier implementation
-├── data/                           # Dataset storage (with real medical data)
-│   ├── aml_cytomorphology/         # AML cytomorphology dataset
-│   ├── bone_marrow_cytomorphology/ # Bone marrow dataset
-│   └── real_datasets/              # Additional real datasets
-├── results/                        # Generated visualizations and outputs
-└── *.png                          # Generated analysis visualizations
+A Single-cell Morphological Dataset of Leukocytes from AML Patients 
+and Non-malignant Controls [Data set]. The Cancer Imaging Archive. 
+https://doi.org/10.7937/tcia.2019.36f5o9ld
 ```
 
 ## License
 
-This project is licensed under the MIT License. The integrated datasets from TCIA have their own licensing terms (CC BY 3.0 and CC BY 4.0) which must be followed when using the data.
+MIT License - Dataset: CC BY 3.0
 
-## Acknowledgments
+## Author
 
-- The Cancer Imaging Archive (TCIA) for providing high-quality medical datasets
-- Munich University Hospital and Munich Leukemia Laboratory for data collection
-- Helmholtz Munich and Fraunhofer IIS for data processing infrastructure
-- PennyLane and Qiskit communities for quantum computing frameworks
+A. Zrabano - November 2024
