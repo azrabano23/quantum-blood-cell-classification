@@ -5,8 +5,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Paper](https://img.shields.io/badge/WCCI%202026-Conference%20Paper-green.svg)](https://github.com/azrabano23/conference-paper-quantum-ml)
 
-> **Conference Paper:** Submitted to WCCI 2026 Special Session on Quantum Machine Learning (January 31, 2026 deadline)
-
 ---
 
 ## 🎯 Key Finding: Quantum Methods Are Competitive!
@@ -20,7 +18,7 @@
 | **CNN (Classical)** | **98.4%** | — | 745s (12.4 min) | Best accuracy |
 | **Dense NN (Classical)** | **92.0%** | -6.4% | 0.47s | Fastest |
 | **Equilibrium Propagation** | **86.4%** | **-12%** | 89.4s | Quantum-inspired, no backprop |
-| **VQC (Quantum)** | **83.0%** | **-15%** | 180s | **5× data efficiency** |
+| **VQC (Quantum)** | **83.0%** | **-15%** | 180s | **More data efficiency** |
 
 ### Dataset Scaling Results
 
@@ -43,24 +41,16 @@
 - 250 samples: **86.4%** (89.4s train) ← **Only 12% below CNN!**
 
 **VQC (Quantum) - STABLE ACROSS ALL SCALES:**
-- 50 samples: **83.0%** ← Peak performance with minimal data!
+- 50 samples: **83.0%** ← Peak performance with minimal data
 - 100 samples: **83.0%**
 - 200 samples: **83.0%**
 - 250 samples: **83.0%** ← **5× data efficiency vs CNN**
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 This project **proves Quantum Machine Learning is competitive** with classical methods for real-world medical imaging. We compare classical, Quantum-inspired, and pure Quantum approaches for automated detection of Acute Myeloid Leukemia (AML) from blood cell microscopy images.
-
-### Key Features
-- ✅ **Quantum competitiveness proven**: EP 86.4% (only 12% below CNN), VQC 83% (only 15% below)
-- ✅ **5× data efficiency**: VQC maintains 83% with 50 samples; CNN needs 250 samples
-- ✅ **$40K cost savings**: VQC requires $10K in annotations vs CNN's $50K for comparable utility
-- ✅ Real clinical dataset (18,365 images from Munich University Hospital)
-- ✅ 4 different ML approaches with comprehensive benchmarks
-- ✅ NISQ-ready: 4-qubit VQC with depth-12 circuit
 
 ### Methods Implemented
 
@@ -87,23 +77,6 @@ This project **proves Quantum Machine Learning is competitive** with classical m
    - **Scale-invariant**: 83% from 50 to 250 samples (5× data efficiency!)
 
 ---
-
-## 📄 Conference Paper (WCCI 2026)
-
-**Title:** "Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia"
-
-**Submitted to:** WCCI 2026 Special Session on Quantum Machine Learning (January 31, 2026)
-
-**Key Contributions:**
-1. **Proof of quantum competitiveness**: Quantum methods achieve 83-86.4% accuracy (only 12-15% below CNN) on real clinical data
-2. **5× data efficiency demonstrated**: VQC maintains stable 83% accuracy from 50 to 250 samples per class
-3. **Economic impact quantified**: $40K cost savings in expert annotation ($10K vs $50K)
-4. **NISQ-ready implementation**: 4-qubit, depth-12 circuit fits current IBM Quantum hardware constraints
-
-**Paper Repository:** [github.com/azrabano23/conference-paper-quantum-ml](https://github.com/azrabano23/conference-paper-quantum-ml)
-
----
-
 ## 🚀 Quick Start
 
 ### Installation
@@ -192,112 +165,6 @@ IMPROVEMENTS_SUMMARY.md      # Technical improvements documentation
 RUNTIME_BENCHMARKS.md        # Performance benchmarks across dataset sizes
 archive/                     # Archived documentation and legacy code
 ```
-
----
-
-## 🔬 Technical Details
-
-### Data Augmentation (CNN)
-- Horizontal/vertical flips (50% probability)
-- Random rotation (±15 degrees)
-- Brightness adjustment (±20%)
-- Random zoom (90-110%)
-
-### Feature Engineering (EP/Dense NN)
-**20 Enhanced Features:**
-1. **Statistical (6)**: mean, std, median, Q25, Q75, range
-2. **GLCM Texture (6)**: contrast, dissimilarity, homogeneity, energy, correlation, ASM
-3. **Morphological (4)**: area, eccentricity, solidity, extent
-4. **Edge (2)**: density, variation (Sobel)
-5. **Frequency (2)**: FFT magnitude statistics
-
-### Training Configuration
-- **CNN**: 60 epochs, batch size 16, cosine annealing LR
-- **Dense NN**: 100 epochs, Adam optimizer, LR=0.001
-- **EP**: 100 epochs, momentum 0.9, cosine annealing, early stopping
-- **VQC**: COBYLA optimizer, 200 iterations, 4 qubits
-
-### Hardware Requirements
-- **CPU**: Any modern processor (all methods can run on CPU)
-- **GPU**: Optional for CNN (CUDA-capable, speeds up training 5-10×)
-- **RAM**: 8GB minimum, 16GB recommended
-- **Disk**: ~500MB for code, 5-10GB for full dataset
-
----
-
-## 📈 Detailed Results
-
-### CNN Performance (250 samples/class)
-```
-              Precision  Recall  F1-Score  Support
-Healthy         100%      97%      98%       63
-AML              97%     100%      98%       62
-
-Overall Accuracy: 98.4%
-Training Time: 745.1s (12.4 minutes)
-Inference Time: 0.19s (125 samples)
-```
-
-### Dense NN Performance (50 samples/class)
-```
-              Precision  Recall  F1-Score  Support
-Healthy         100%      85%      92%       13
-AML              86%     100%      92%       12
-
-Overall Accuracy: 92.0%
-Training Time: 0.47s
-Inference Time: 0.001s (25 samples)
-```
-
-### Equilibrium Propagation (50 samples/class)
-```
-              Precision  Recall  F1-Score  Support
-Healthy          90%      69%      78%       13
-AML              73%      92%      81%       12
-
-Overall Accuracy: 80.0%
-Training Time: 21.0s
-Inference Time: 0.13s (25 samples)
-```
-
-### Key Metrics by Method
-
-| Metric | CNN | Dense NN | EP | VQC |
-|--------|-----|----------|----|----|
-| Best Accuracy | 98.4% | 92.0% | 84.0% | 83.0% |
-| Average Accuracy | 95.4% | 86.4% | 82.1% | 83.0% |
-| Fastest Training | 22.5s | **0.47s** | 21.0s | 180s |
-| Most Stable | ±3% | ±6% | **±2%** | ±3% |
-
----
-
-## 🏥 Clinical Significance
-
-### Quantum Advantage for Medical Imaging
-- **Data efficiency**: VQC achieves 83% with 50 samples; CNN needs 250 samples for 98% (5× advantage)
-- **Cost reduction**: $40K savings in expert annotation ($10K vs $50K for comparable clinical utility)
-- **Rare diseases**: Makes feasibility studies tractable when large datasets are impossible to acquire
-- **Expert time**: Annotations cost $100-500 per image, requiring 2-5 hours of specialist time
-
-### Production Readiness
-- **98.4% CNN accuracy** exceeds typical medical imaging benchmarks (85-95%)
-- **83% VQC accuracy** sufficient for initial screening (sensitivity/specificity)
-- **<1 second inference** enables real-time diagnosis
-- **High precision** (97-100%) minimizes false positives
-
-### Medical Impact
-- Automates time-consuming manual microscopy review
-- Quantum methods enable studies with limited annotated data
-- Reduces pathologist workload for screening
-- Enables rapid AML detection for treatment planning
-
-### Deployment Considerations
-- **Use CNN** for maximum accuracy in clinical settings with large datasets
-- **Use VQC** when data is scarce or annotation costs are prohibitive
-- **Use EP** for energy-efficient hardware (neuromorphic chips, 250× power reduction)
-- **Use Dense NN** for resource-constrained environments
-- All methods suitable for assisted diagnosis (not replacement)
-
 ---
 
 ## 🔗 References
@@ -352,24 +219,10 @@ If you use this work, please cite:
 MIT License - See LICENSE file for details
 
 Dataset: CC BY 3.0 License ([TCIA](https://www.cancerimagingarchive.net/))
-
 ---
 
-## 👤 Author
-
-**A. Zrabano**  
-December 2024
-
-GitHub: [@azrabano23](https://github.com/azrabano23)
-
----
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Munich University Hospital for the AML-Cytomorphology dataset
 - Qiskit and IBM Quantum teams for quantum computing tools
 - PyTorch and scikit-learn communities for ML frameworks
-
----
-
-**⭐ Star this repository if you find it useful!**
