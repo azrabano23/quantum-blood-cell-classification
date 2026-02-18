@@ -31,17 +31,9 @@ import json
 # Qiskit imports
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes, ZFeatureMap
-try:
-    from qiskit_algorithms.optimizers import COBYLA, SPSA
-    from qiskit_algorithms.utils import algorithm_globals
-    from qiskit_machine_learning.algorithms import VQC
-    from qiskit_machine_learning.kernels import FidelityQuantumKernel
-except ImportError:
-    from qiskit.algorithms.optimizers import COBYLA, SPSA
-    from qiskit.algorithms import algorithm_globals
-    from qiskit_machine_learning.algorithms import VQC
-    from qiskit_machine_learning.kernels import FidelityQuantumKernel
-from qiskit.primitives import Sampler
+from qiskit_algorithms.optimizers import COBYLA, SPSA
+from qiskit_algorithms.utils import algorithm_globals
+from qiskit_machine_learning.kernels import FidelityQuantumKernel
 from sklearn.svm import SVC
 
 np.random.seed(42)
