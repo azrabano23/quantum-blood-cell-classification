@@ -329,8 +329,8 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
             X, y, test_size=0.25, random_state=42, stratify=y
         )
         
-        # Train with data augmentation and regularization
-        train_time = classifier.train(X_train, y_train, epochs=60, batch_size=16, 
+        # Train with data augmentation and regularization (more epochs for high accuracy)
+        train_time = classifier.train(X_train, y_train, epochs=150, batch_size=16, 
                                       learning_rate=0.001, weight_decay=0.0001, use_augmentation=True)
         
         # Predict

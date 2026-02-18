@@ -18,9 +18,12 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from skimage.io import imread_collection
 from skimage.transform import resize
 from skimage.feature import graycomatrix, graycoprops
+from skimage.measure import regionprops, label
+from skimage.filters import sobel
 import os
 import time
 import json
@@ -44,64 +47,81 @@ algorithm_globals.random_seed = 42
 class VQCClassifier:
     """
     Variational Quantum Classifier using Qiskit
+    Paper: 4 qubits, ZZFeatureMap, RealAmplitudes (2 layers), COBYLA 200 iterations
+    Features: 20D reduced to 4D via PCA
     """
     
-    def __init__(self, n_qubits=4, use_advanced_encoding=True):
+    def __init__(self, n_qubits=4, n_features=20):
         self.n_qubits = n_qubits
+        self.n_features = n_features
         self.scaler = StandardScaler()
+        self.pca = PCA(n_components=n_qubits)
         self.training_history = []
         self.vqc = None
-        self.use_advanced_encoding = use_advanced_encoding
         
     def extract_features(self, img_path):
-        """Extract texture and statistical features from image"""
+        """Extract 20 features: intensity, GLCM, morphology, edge, frequency"""
         try:
             img = imread_collection([img_path])[0]
             
             # Convert to grayscale
             if len(img.shape) == 3:
-                img = np.mean(img, axis=2)
+                img_gray = np.mean(img, axis=2)
+            else:
+                img_gray = img
             
-            # Resize
-            img_resized = resize(img, (32, 32), anti_aliasing=True)
+            # Resize to 64x64 as per paper
+            img_resized = resize(img_gray, (64, 64), anti_aliasing=True)
             img_normalized = (img_resized - img_resized.min()) / (img_resized.max() - img_resized.min() + 1e-8)
             
-            # GLCM texture features
-            img_uint8 = (img_normalized * 255).astype(np.uint8)
-            glcm = graycomatrix(img_uint8, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
-            
             features = []
-            # Enhanced feature extraction for quantum advantage
-            # Statistical features
+            
+            # 1. Intensity statistics (5 features)
             features.append(np.mean(img_normalized))
             features.append(np.std(img_normalized))
             features.append(np.median(img_normalized))
             features.append(np.percentile(img_normalized, 25))
             features.append(np.percentile(img_normalized, 75))
-            features.append(np.max(img_normalized) - np.min(img_normalized))  # Range
             
-            # Texture features from GLCM
+            # 2. GLCM texture descriptors (5 features)
+            img_uint8 = (img_normalized * 255).astype(np.uint8)
+            glcm = graycomatrix(img_uint8, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
             features.append(graycoprops(glcm, 'contrast')[0, 0])
             features.append(graycoprops(glcm, 'dissimilarity')[0, 0])
             features.append(graycoprops(glcm, 'homogeneity')[0, 0])
             features.append(graycoprops(glcm, 'energy')[0, 0])
             features.append(graycoprops(glcm, 'correlation')[0, 0])
-            features.append(graycoprops(glcm, 'ASM')[0, 0])
             
-            # Moment features
-            features.append(np.mean(img_normalized ** 2))  # Second moment
-            features.append(np.mean(img_normalized ** 3))  # Third moment
+            # 3. Morphology metrics (4 features)
+            thresh = img_normalized > np.mean(img_normalized)
+            labeled = label(thresh)
+            if labeled.max() > 0:
+                props = regionprops(labeled)[0]
+                features.append(props.area / (64 * 64))
+                features.append(props.eccentricity)
+                features.append(props.solidity)
+                features.append(props.extent)
+            else:
+                features.extend([0.5, 0.5, 0.5, 0.5])
             
-            # Edge statistics
-            from scipy import ndimage
-            edges = ndimage.sobel(img_normalized)
+            # 4. Edge density/variation (3 features)
+            edges = sobel(img_normalized)
             features.append(np.mean(edges))
             features.append(np.std(edges))
+            features.append(np.max(edges))
             
-            return np.array(features[:self.n_qubits])
+            # 5. Frequency-domain (FFT) features (3 features)
+            fft = np.fft.fft2(img_normalized)
+            fft_shift = np.fft.fftshift(fft)
+            magnitude = np.abs(fft_shift)
+            features.append(np.mean(magnitude))
+            features.append(np.std(magnitude))
+            features.append(np.max(magnitude))
+            
+            return np.array(features[:self.n_features])
             
         except Exception as e:
-            return np.random.randn(self.n_qubits) * 0.1
+            return np.random.randn(self.n_features) * 0.1
     
     def load_data(self, dataset_folder, max_samples_per_class=150):
         """Load blood cell data"""
@@ -153,44 +173,48 @@ class VQCClassifier:
         return X, y
     
     def preprocess(self, X_train, X_test):
-        """Fit scaler on TRAIN ONLY to avoid data leakage"""
+        """Fit scaler and PCA on TRAIN ONLY to avoid data leakage"""
+        # Standardize
         X_train = self.scaler.fit_transform(X_train)
-        X_test = self.scaler.transform(X_test)  # transform only, no fit!
+        X_test = self.scaler.transform(X_test)
+        
+        # PCA: reduce from 20 features to 4 (for 4 qubits)
+        X_train = self.pca.fit_transform(X_train)
+        X_test = self.pca.transform(X_test)
+        
+        # Rescale to [0, 2π] for rotation gates
+        X_train = (X_train - X_train.min()) / (X_train.max() - X_train.min() + 1e-8) * 2 * np.pi
+        X_test = (X_test - X_test.min()) / (X_test.max() - X_test.min() + 1e-8) * 2 * np.pi
+        
+        print(f"PCA variance explained: {sum(self.pca.explained_variance_ratio_)*100:.1f}%")
+        
         return X_train, X_test
     
-    def train(self, X_train, y_train, max_iterations=100):
-        """Train the VQC with optimized parameters"""
+    def train(self, X_train, y_train, max_iterations=200):
+        """Train VQC as per paper: ZZFeatureMap + RealAmplitudes(2 reps) + COBYLA(200)"""
         
-        print(f"\nTraining Optimized Variational Quantum Classifier (VQC)")
+        print(f"\nTraining Variational Quantum Classifier (VQC)")
         print(f"Qubits: {self.n_qubits}")
         print(f"Training samples: {len(X_train)}")
-        print(f"Advanced encoding: {self.use_advanced_encoding}")
-        print(f"Optimizer: COBYLA (Constrained Optimization BY Linear Approximation)")
+        print(f"Feature map: ZZFeatureMap (reps=2)")
+        print(f"Ansatz: RealAmplitudes (reps=2, 8 parameters)")
+        print(f"Optimizer: COBYLA ({max_iterations} iterations)")
         
-        # Create optimized feature map
-        if self.use_advanced_encoding:
-            feature_map = ZZFeatureMap(
-                feature_dimension=self.n_qubits, 
-                reps=2,  # Balanced encoding
-                entanglement='circular',  # Circular for better connectivity
-                insert_barriers=False
-            )
-        else:
-            feature_map = ZZFeatureMap(
-                feature_dimension=self.n_qubits, 
-                reps=2, 
-                entanglement='linear'
-            )
-        
-        # Create optimized ansatz
-        ansatz = RealAmplitudes(
-            num_qubits=self.n_qubits, 
-            reps=3,  # Balanced depth
-            entanglement='circular',  # Circular for efficiency
-            insert_barriers=False
+        # ZZFeatureMap for quantum data encoding (as per paper)
+        feature_map = ZZFeatureMap(
+            feature_dimension=self.n_qubits, 
+            reps=2,
+            entanglement='full'
         )
         
-        # Use COBYLA optimizer (more stable for small datasets)
+        # Shallow RealAmplitudes ansatz (2 layers, 8 parameters as per paper)
+        ansatz = RealAmplitudes(
+            num_qubits=self.n_qubits, 
+            reps=2,
+            entanglement='full'
+        )
+        
+        # COBYLA optimizer (200 iterations as per paper)
         optimizer = COBYLA(maxiter=max_iterations)
         
         # Create sampler
@@ -244,8 +268,8 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
         print(f"EXPERIMENT: VQC with {n_samples} samples per class")
         print("="*80)
         
-        # Use 4 qubits with advanced encoding for quantum advantage
-        classifier = VQCClassifier(n_qubits=4, use_advanced_encoding=True)
+        # 4 qubits, 20 features reduced to 4 via PCA
+        classifier = VQCClassifier(n_qubits=4, n_features=20)
         
         # Load data
         start_load = time.time()
