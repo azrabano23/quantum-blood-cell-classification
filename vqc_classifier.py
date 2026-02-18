@@ -3,14 +3,14 @@
 Variational Quantum Classifier (VQC) for Blood Cell Classification
 ===================================================================
 
-Implements a VQC using Qiskit with:
+Implements a VQC using Qiskit EXACTLY as described in the paper:
 - Feature map: ZZFeatureMap for data encoding
-- Ansatz: RealAmplitudes variational form
-- Optimizer: COBYLA (gradient-free)
-- Backend: Qiskit simulator
+- Ansatz: RealAmplitudes (2 layers, 8 trainable parameters)
+- Optimizer: COBYLA (gradient-free), 200 iterations
+- Loss: MSE between <Z0> expectation and target labels
+- Classification: threshold <Z0> at zero
 
-This is a pure quantum approach using Qiskit's built-in VQC.
-
+Paper: arXiv:2601.18710
 Author: A. Zrabano
 """
 
@@ -25,25 +25,33 @@ from skimage.feature import graycomatrix, graycoprops
 from skimage.measure import regionprops, label
 from skimage.filters import sobel
 import os
+import sys
 import time
 import json
 
 # Qiskit imports
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes, ZFeatureMap
-from qiskit_algorithms.optimizers import COBYLA, SPSA
+from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes
+from qiskit.primitives import StatevectorEstimator
+from qiskit.quantum_info import SparsePauliOp
+from qiskit_algorithms.optimizers import COBYLA
 from qiskit_algorithms.utils import algorithm_globals
-from qiskit_machine_learning.kernels import FidelityQuantumKernel
-from sklearn.svm import SVC
 
 np.random.seed(42)
 algorithm_globals.random_seed = 42
 
+
 class VQCClassifier:
     """
-    Variational Quantum Classifier using Qiskit
-    Paper: 4 qubits, ZZFeatureMap, RealAmplitudes (2 layers), COBYLA 200 iterations
-    Features: 20D reduced to 4D via PCA
+    Variational Quantum Classifier - EXACTLY as described in paper.
+    
+    Paper specifications:
+    - 4 qubits
+    - ZZFeatureMap for encoding (creates entanglement via second-order Pauli-Z)
+    - RealAmplitudes ansatz (2 layers, 8 trainable parameters)
+    - COBYLA optimizer (gradient-free), 200 iterations
+    - MSE loss between <Z0> and target labels
+    - Classification: <Z0> > 0 -> class 1, else class 0
     """
     
     def __init__(self, n_qubits=4, n_features=20):
@@ -52,7 +60,8 @@ class VQCClassifier:
         self.scaler = StandardScaler()
         self.pca = PCA(n_components=n_qubits)
         self.training_history = []
-        self.vqc = None
+        self.optimal_params = None
+        self.estimator = StatevectorEstimator()
         
     def extract_features(self, img_path):
         """Extract 20 features: intensity, GLCM, morphology, edge, frequency"""
@@ -145,12 +154,12 @@ class VQCClassifier:
                     if cell_type in healthy_cell_types:
                         if class_counts['healthy'] >= max_samples_per_class:
                             continue
-                        label = 0
+                        lbl = 0
                         class_counts['healthy'] += 1
                     elif cell_type in aml_cell_types:
                         if class_counts['aml'] >= max_samples_per_class:
                             continue
-                        label = 1
+                        lbl = 1
                         class_counts['aml'] += 1
                     else:
                         continue
@@ -158,7 +167,7 @@ class VQCClassifier:
                     img_path = os.path.join(dirpath, file)
                     features = self.extract_features(img_path)
                     X.append(features)
-                    y.append(label)
+                    y.append(lbl)
         
         X = np.array(X)
         y = np.array(y)
@@ -168,7 +177,12 @@ class VQCClassifier:
         return X, y
     
     def preprocess(self, X_train, X_test):
-        """Fit scaler and PCA on TRAIN ONLY to avoid data leakage"""
+        """
+        Preprocess data EXACTLY as paper describes:
+        - Standardize
+        - PCA from 20 to 4 features (retaining ~95% variance)
+        - Rescale to [0, 2*pi] for rotation gates
+        """
         # Standardize
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
@@ -181,79 +195,160 @@ class VQCClassifier:
         self.feature_min = X_train_pca.min(axis=0)
         self.feature_max = X_train_pca.max(axis=0)
         
-        # Rescale each feature independently to [0, π] for rotation gates
-        # Use training set statistics for both train and test
+        # Rescale to [0, 2*pi] as per paper ("rescaled to [0, 2π] to match rotation gate domains")
         X_train_final = np.zeros_like(X_train_pca)
         X_test_final = np.zeros_like(X_test_pca)
         
         for i in range(self.n_qubits):
             range_i = self.feature_max[i] - self.feature_min[i] + 1e-8
-            X_train_final[:, i] = (X_train_pca[:, i] - self.feature_min[i]) / range_i * np.pi
-            X_test_final[:, i] = (X_test_pca[:, i] - self.feature_min[i]) / range_i * np.pi
+            X_train_final[:, i] = (X_train_pca[:, i] - self.feature_min[i]) / range_i * 2 * np.pi
+            X_test_final[:, i] = (X_test_pca[:, i] - self.feature_min[i]) / range_i * 2 * np.pi
             # Clip test data to valid range
-            X_test_final[:, i] = np.clip(X_test_final[:, i], 0, np.pi)
+            X_test_final[:, i] = np.clip(X_test_final[:, i], 0, 2 * np.pi)
         
         print(f"PCA variance explained: {sum(self.pca.explained_variance_ratio_)*100:.1f}%")
         
         return X_train_final, X_test_final
     
-    def train(self, X_train, y_train, max_iterations=300):
-        """Train using Quantum Kernel SVM for better accuracy"""
-        
-        print(f"\nTraining Quantum Kernel Classifier")
-        print(f"Qubits: {self.n_qubits}")
-        print(f"Training samples: {len(X_train)}")
-        print(f"Feature map: ZZFeatureMap (reps=2)")
-        print(f"Classifier: SVM with Quantum Kernel")
-        
-        start_time = time.time()
-        
-        # ZZFeatureMap for quantum data encoding
+    def _build_circuit(self, x, params):
+        """
+        Build VQC circuit EXACTLY as paper describes:
+        - ZZFeatureMap for encoding (creates entanglement between qubit pairs)
+        - RealAmplitudes ansatz (2 layers, 8 trainable parameters)
+        """
+        # Feature map: ZZFeatureMap with 2 repetitions
         feature_map = ZZFeatureMap(
-            feature_dimension=self.n_qubits, 
+            feature_dimension=self.n_qubits,
             reps=2,
             entanglement='full'
         )
         
-        # Create quantum kernel
-        self.quantum_kernel = FidelityQuantumKernel(feature_map=feature_map)
+        # Ansatz: RealAmplitudes with 2 layers (8 parameters for 4 qubits)
+        ansatz = RealAmplitudes(
+            num_qubits=self.n_qubits,
+            reps=2,
+            entanglement='full'
+        )
         
-        # Compute kernel matrix for training data
-        print("  Computing quantum kernel matrix...")
-        kernel_matrix_train = self.quantum_kernel.evaluate(X_train)
+        # Combine into full circuit
+        qc = QuantumCircuit(self.n_qubits)
+        qc.compose(feature_map.assign_parameters(x), inplace=True)
+        qc.compose(ansatz.assign_parameters(params), inplace=True)
         
-        # Train SVM with precomputed quantum kernel
-        self.svm = SVC(kernel='precomputed', C=1.0)
-        self.svm.fit(kernel_matrix_train, y_train)
+        return qc
+    
+    def _compute_expectation(self, x, params):
+        """
+        Compute <Z0> expectation value on first qubit.
+        Paper: "expectation-value measurement on the first qubit"
+        """
+        qc = self._build_circuit(x, params)
         
-        # Store training data for prediction
-        self.X_train = X_train
+        # Z operator on first qubit
+        observable = SparsePauliOp.from_list([('Z' + 'I' * (self.n_qubits - 1), 1.0)])
+        
+        # Compute expectation
+        job = self.estimator.run([(qc, observable)])
+        result = job.result()[0]
+        
+        return result.data.evs
+    
+    def _compute_batch_expectation(self, X, params):
+        """Compute expectations for a batch of samples"""
+        expectations = []
+        for x in X:
+            exp = self._compute_expectation(x, params)
+            expectations.append(exp)
+        return np.array(expectations)
+    
+    def _mse_loss(self, params, X, y):
+        """
+        MSE loss between <Z0> and target labels.
+        Paper: "mean squared error between <Z0> and target labels"
+        
+        Labels: 0 (healthy) -> target -1, 1 (AML) -> target +1
+        """
+        # Convert labels to +1/-1 for expectation value comparison
+        targets = 2 * y - 1  # 0 -> -1, 1 -> +1
+        
+        # Compute expectations
+        expectations = self._compute_batch_expectation(X, params)
+        
+        # MSE loss
+        loss = np.mean((expectations - targets) ** 2)
+        
+        return loss
+    
+    def train(self, X_train, y_train, max_iterations=200):
+        """
+        Train VQC using COBYLA optimizer EXACTLY as paper describes.
+        Paper: "COBYLA, gradient-free... steps 1-4 repeat for 200 iterations"
+        """
+        print(f"\nTraining VQC (Paper-exact implementation)")
+        print(f"  Qubits: {self.n_qubits}")
+        print(f"  Training samples: {len(X_train)}")
+        print(f"  Feature map: ZZFeatureMap (reps=2, full entanglement)")
+        print(f"  Ansatz: RealAmplitudes (2 layers, 8 parameters)")
+        print(f"  Optimizer: COBYLA, {max_iterations} iterations")
+        print(f"  Loss: MSE between <Z0> and target labels")
+        
+        start_time = time.time()
+        
+        # RealAmplitudes with 2 layers on 4 qubits = 8 parameters
+        n_params = self.n_qubits * 2  # 2 layers
+        initial_params = np.random.uniform(0, 2*np.pi, n_params)
+        
+        # Track best loss
+        self.best_loss = float('inf')
+        self.iteration_count = 0
+        
+        def objective(params):
+            loss = self._mse_loss(params, X_train, y_train)
+            self.iteration_count += 1
+            
+            if loss < self.best_loss:
+                self.best_loss = loss
+                self.optimal_params = params.copy()
+            
+            if self.iteration_count % 20 == 0:
+                print(f"    Iteration {self.iteration_count}: Loss = {loss:.4f}")
+            
+            self.training_history.append({
+                'iteration': self.iteration_count,
+                'loss': float(loss)
+            })
+            
+            return loss
+        
+        # COBYLA optimizer (gradient-free) as per paper
+        optimizer = COBYLA(maxiter=max_iterations)
+        result = optimizer.minimize(objective, initial_params)
+        
+        self.optimal_params = result.x
         
         training_time = time.time() - start_time
-        print(f"Training completed in {training_time:.2f} seconds")
+        print(f"\nTraining completed in {training_time:.2f} seconds")
+        print(f"Final loss: {result.fun:.4f}")
         
         return training_time
     
-    def _callback(self, weights_count, parameters, mean, std):
-        """Callback for tracking training progress"""
-        self.training_history.append({
-            'iteration': weights_count,
-            'mean': mean,
-            'std': std
-        })
-        if weights_count % 20 == 0:
-            print(f"  Iteration {weights_count}: Loss = {mean:.4f}")
-    
     def predict(self, X):
-        """Make predictions using quantum kernel"""
-        if not hasattr(self, 'svm') or self.svm is None:
+        """
+        Make predictions using trained VQC.
+        Paper: "Classification employs expectation-value measurement on first qubit,
+               thresholded at zero for binary label assignment"
+        """
+        if self.optimal_params is None:
             raise ValueError("Model must be trained first")
         
-        # Compute kernel between test and training data
-        kernel_matrix_test = self.quantum_kernel.evaluate(X, self.X_train)
-        predictions = self.svm.predict(kernel_matrix_test)
+        predictions = []
+        for x in X:
+            exp = self._compute_expectation(x, self.optimal_params)
+            # Threshold at zero: <Z0> > 0 -> class 1 (AML), else class 0 (healthy)
+            pred = 1 if exp > 0 else 0
+            predictions.append(pred)
         
-        return predictions
+        return np.array(predictions)
 
 def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
     """Run experiments with different dataset sizes"""
@@ -342,9 +437,19 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
     return results
 
 if __name__ == "__main__":
-    dataset_path = "/Users/azrabano/Downloads/PKG - AML-Cytomorphology_LMU"
+    # Accept dataset path from command line or use default
+    if len(sys.argv) > 1:
+        dataset_path = sys.argv[1]
+    else:
+        dataset_path = os.environ.get(
+            'AML_DATASET_PATH',
+            '/Users/azrabano/Downloads/PKG - AML-Cytomorphology_LMU'
+        )
     
     if not os.path.exists(dataset_path):
         print(f"Dataset not found at: {dataset_path}")
+        print("Usage: python vqc_classifier.py <dataset_path>")
+        print("Or set AML_DATASET_PATH environment variable")
+        sys.exit(1)
     else:
         results = run_experiment(dataset_path, sample_sizes=[50, 100, 200, 250])

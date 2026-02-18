@@ -3,11 +3,22 @@
 Verified Experiments - Match Paper Accuracies
 =============================================
 
-Target accuracies from arXiv:2601.18710:
-- CNN: 98% (at 250 samples)
+Runs all 4 models from arXiv:2601.18710 with paper-exact implementations:
+- CNN: Convolutional Neural Network with data augmentation
+- Dense NN: Dense Neural Network on 20 engineered features
+- EP: Equilibrium Propagation (NO backpropagation, beta=0.1, tanh)
+- VQC: Variational Quantum Classifier (ZZFeatureMap + RealAmplitudes + COBYLA)
+
+Target accuracies:
+- CNN: 98.4%
+- Dense NN: 92.0%
 - EP: 86.4%
-- VQC: 83%
-- Dense NN: ~78%
+- VQC: 83.0%
+
+Usage:
+    python run_verified_experiments.py [dataset_path]
+    
+Or set AML_DATASET_PATH environment variable.
 
 Author: A. Zrabano
 """
@@ -21,13 +32,13 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.svm import SVC
 from skimage.io import imread_collection
 from skimage.transform import resize, rotate
 from skimage.feature import graycomatrix, graycoprops
 from skimage.measure import regionprops, label
 from skimage.filters import sobel
 import os
+import sys
 import time
 import json
 import warnings
@@ -37,7 +48,14 @@ warnings.filterwarnings('ignore')
 np.random.seed(42)
 torch.manual_seed(42)
 
-DATASET_PATH = "/Users/azrabano/Downloads/PKG - AML-Cytomorphology_LMU"
+# Get dataset path from command line or environment
+if len(sys.argv) > 1:
+    DATASET_PATH = sys.argv[1]
+else:
+    DATASET_PATH = os.environ.get(
+        'AML_DATASET_PATH',
+        '/Users/azrabano/Downloads/PKG - AML-Cytomorphology_LMU'
+    )
 
 # Cell type mappings
 HEALTHY_TYPES = ['LYT', 'MON', 'NGS', 'NGB']
@@ -327,147 +345,98 @@ def train_dense_nn(X_train, y_train, X_test, y_test, epochs=300):
 
 ###############################################################################
 # 3. EQUILIBRIUM PROPAGATION - Target: 86.4%
-# Using a simplified but effective neural network with EP-inspired training
+# Paper-exact implementation: tanh activations, beta=0.1, NO backpropagation
 ###############################################################################
 
-class EPNetwork(nn.Module):
-    """Neural network trained with EP-inspired local learning"""
-    def __init__(self, input_dim=20):
-        super().__init__()
-        self.fc1 = nn.Linear(input_dim, 256)
-        self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 64)
-        self.fc4 = nn.Linear(64, 2)
-        self.bn1 = nn.BatchNorm1d(256)
-        self.bn2 = nn.BatchNorm1d(128)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.dropout = nn.Dropout(0.2)
+# Import paper-exact EP implementation
+from equilibrium_propagation import EquilibriumPropagationNetwork
+
+
+def train_ep(X_train, y_train, X_test, y_test, epochs=100):
+    """
+    Train Equilibrium Propagation network - EXACTLY as described in paper.
     
-    def forward(self, x):
-        x = torch.relu(self.bn1(self.fc1(x)))
-        x = self.dropout(x)
-        x = torch.relu(self.bn2(self.fc2(x)))
-        x = self.dropout(x)
-        x = torch.relu(self.bn3(self.fc3(x)))
-        x = self.fc4(x)
-        return x
-
-
-def train_ep(X_train, y_train, X_test, y_test, epochs=500):
-    """Train EP-style network - target 86.4%"""
+    Paper specifications:
+    - Architecture: 256-128-64 hidden layers, tanh activations
+    - Free/nudged phases with beta=0.1
+    - NO backpropagation - uses local Hebbian-like learning
+    - Momentum SGD (μ=0.9), cosine annealing LR, early stopping
+    """
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = EPNetwork(input_dim=X_train.shape[1]).to(device)
+    print("  Architecture: 20 -> 256 -> 128 -> 64 -> 2")
+    print("  Activation: tanh (paper-exact)")
+    print("  Beta (nudging strength): 0.1")
+    print("  Training: NO backpropagation - local Hebbian-like learning")
     
-    X_train_t = torch.FloatTensor(X_train_scaled).to(device)
-    y_train_t = torch.LongTensor(y_train).to(device)
-    X_test_t = torch.FloatTensor(X_test_scaled).to(device)
+    # Create EP network with paper-exact parameters
+    model = EquilibriumPropagationNetwork(
+        layer_sizes=[20, 256, 128, 64, 2],
+        beta=0.1,  # Paper: beta=0.1
+        learning_rate=0.08,
+        use_momentum=True,
+        momentum=0.9,  # Paper: momentum=0.9
+        l2_reg=0.0001
+    )
     
-    # Class weights for imbalance
-    class_weights = torch.FloatTensor([1.0, 1.0]).to(device)
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    # Split for validation
+    n_val = int(len(X_train_scaled) * 0.15)
+    indices = np.random.permutation(len(X_train_scaled))
+    X_train_ep = X_train_scaled[indices[n_val:]]
+    y_train_ep = y_train[indices[n_val:]]
+    X_val = X_train_scaled[indices[:n_val]]
+    y_val = y_train[indices[:n_val]]
     
-    optimizer = optim.AdamW(model.parameters(), lr=0.005, weight_decay=0.01)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    # Train with early stopping
+    model.train(X_train_ep, y_train_ep, X_val=X_val, y_val=y_val, epochs=epochs, patience=15)
     
-    best_acc = 0
-    best_model_state = None
+    # Predict
+    predictions = model.predict(X_test_scaled)
+    acc = accuracy_score(y_test, predictions)
     
-    for epoch in range(epochs):
-        model.train()
-        
-        # Mini-batch training
-        indices = torch.randperm(len(X_train_t))
-        batch_size = 32
-        
-        for i in range(0, len(indices), batch_size):
-            batch_idx = indices[i:i+batch_size]
-            optimizer.zero_grad()
-            outputs = model(X_train_t[batch_idx])
-            loss = criterion(outputs, y_train_t[batch_idx])
-            loss.backward()
-            optimizer.step()
-        
-        scheduler.step()
-        
-        if (epoch + 1) % 100 == 0:
-            model.eval()
-            with torch.no_grad():
-                preds = model(X_test_t).argmax(dim=1).cpu().numpy()
-                acc = accuracy_score(y_test, preds)
-                if acc > best_acc:
-                    best_acc = acc
-                    best_model_state = model.state_dict().copy()
-                print(f"  Epoch {epoch+1}/{epochs}: Test Acc = {acc:.3f} (best: {best_acc:.3f})")
-    
-    # Load best model
-    if best_model_state:
-        model.load_state_dict(best_model_state)
-    
-    model.eval()
-    with torch.no_grad():
-        predictions = model(X_test_t).argmax(dim=1).cpu().numpy()
-    
-    return predictions, best_acc
+    return predictions, acc
 
 
 ###############################################################################
 # 4. VQC MODEL - Target: 83%
+# Paper-exact implementation: ZZFeatureMap + RealAmplitudes + COBYLA
 ###############################################################################
 
-def train_vqc(X_train, y_train, X_test, y_test):
-    """Train VQC using quantum-inspired neural network - target 83%"""
-    # Use a quantum-inspired approach with feature encoding similar to VQC
-    # but using classical simulation for reliable results
+# Import paper-exact VQC implementation
+from vqc_classifier import VQCClassifier
+
+
+def train_vqc(X_train, y_train, X_test, y_test, max_iterations=200):
+    """
+    Train Variational Quantum Classifier - EXACTLY as described in paper.
     
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    Paper specifications:
+    - 4 qubits
+    - ZZFeatureMap for encoding (second-order Pauli-Z expansions)
+    - RealAmplitudes ansatz (2 layers, 8 trainable parameters)
+    - COBYLA optimizer (gradient-free), 200 iterations
+    - MSE loss between <Z0> and target labels
+    - Classification: threshold <Z0> at zero
+    """
+    print("  Qubits: 4")
+    print("  Feature map: ZZFeatureMap (reps=2, full entanglement)")
+    print("  Ansatz: RealAmplitudes (2 layers, 8 parameters)")
+    print("  Optimizer: COBYLA (gradient-free), 200 iterations")
+    print("  Loss: MSE between <Z0> and target labels")
     
-    # PCA to 4 dimensions (simulating 4 qubits)
-    pca = PCA(n_components=4)
-    X_train_pca = pca.fit_transform(X_train_scaled)
-    X_test_pca = pca.transform(X_test_scaled)
+    # Create VQC classifier
+    classifier = VQCClassifier(n_qubits=4, n_features=20)
     
-    print(f"  PCA variance explained: {sum(pca.explained_variance_ratio_)*100:.1f}%")
+    # Preprocess: standardize, PCA to 4 dims, rescale to [0, 2π]
+    X_train_processed, X_test_processed = classifier.preprocess(X_train, X_test)
     
-    # Scale to [0, π] for quantum-like encoding
-    X_min, X_max = X_train_pca.min(axis=0), X_train_pca.max(axis=0)
-    X_train_q = (X_train_pca - X_min) / (X_max - X_min + 1e-8) * np.pi
-    X_test_q = np.clip((X_test_pca - X_min) / (X_max - X_min + 1e-8) * np.pi, 0, np.pi)
+    # Train with paper-exact COBYLA optimization
+    classifier.train(X_train_processed, y_train, max_iterations=max_iterations)
     
-    # Quantum-inspired feature expansion (simulating ZZFeatureMap)
-    def quantum_feature_map(X):
-        """Simulate ZZFeatureMap encoding"""
-        n_samples, n_features = X.shape
-        # Single-qubit rotations: cos and sin of each feature
-        features = [np.cos(X), np.sin(X)]
-        # Two-qubit interactions (ZZ-like)
-        for i in range(n_features):
-            for j in range(i+1, n_features):
-                features.append(np.cos(X[:, i:i+1] * X[:, j:j+1]))
-                features.append(np.sin(X[:, i:i+1] * X[:, j:j+1]))
-        return np.hstack(features)
-    
-    X_train_expanded = quantum_feature_map(X_train_q)
-    X_test_expanded = quantum_feature_map(X_test_q)
-    
-    print(f"  Expanded features: {X_train_expanded.shape[1]}")
-    
-    # Train SVM with RBF kernel on quantum-encoded features
-    from sklearn.svm import SVC as SupportVectorClassifier
-    from sklearn.model_selection import GridSearchCV
-    
-    print("  Grid search for optimal SVM parameters...")
-    param_grid = {'C': [0.1, 1, 10, 100], 'gamma': ['scale', 'auto', 0.1, 0.01]}
-    svm = GridSearchCV(SupportVectorClassifier(kernel='rbf'), param_grid, cv=3, n_jobs=-1)
-    svm.fit(X_train_expanded, y_train)
-    
-    print(f"  Best params: {svm.best_params_}")
-    predictions = svm.predict(X_test_expanded)
+    # Predict using expectation value thresholding
+    predictions = classifier.predict(X_test_processed)
     acc = accuracy_score(y_test, predictions)
     
     return predictions, acc
@@ -480,15 +449,24 @@ def train_vqc(X_train, y_train, X_test, y_test):
 def run_all_experiments(n_samples=250):
     """Run all experiments and report results"""
     
+    # Validate dataset path
+    if not os.path.exists(DATASET_PATH):
+        print(f"ERROR: Dataset not found at: {DATASET_PATH}")
+        print("\nUsage: python run_verified_experiments.py <dataset_path>")
+        print("Or set AML_DATASET_PATH environment variable")
+        print("\nDownload dataset from: https://doi.org/10.7937/tcia.2019.36f5o9ld")
+        sys.exit(1)
+    
     print("="*80)
-    print("VERIFIED EXPERIMENTS - Matching Paper Accuracies")
+    print("PAPER-EXACT EXPERIMENTS - arXiv:2601.18710")
     print("="*80)
-    print(f"\nTarget accuracies (arXiv:2601.18710):")
-    print(f"  CNN:      98%")
-    print(f"  EP:       86.4%")
-    print(f"  VQC:      83%")
-    print(f"  Dense NN: ~78%")
+    print(f"\nTarget accuracies from paper:")
+    print(f"  CNN:      98.4%")
+    print(f"  Dense NN: 92.0%")
+    print(f"  EP:       86.4%  (NO backpropagation)")
+    print(f"  VQC:      83.0%  (ZZFeatureMap + RealAmplitudes + COBYLA)")
     print(f"\nUsing {n_samples} samples per class")
+    print(f"Dataset: {DATASET_PATH}")
     print("="*80)
     
     results = {}
@@ -527,7 +505,7 @@ def run_all_experiments(n_samples=250):
     
     # 2. Dense NN
     print("\n" + "="*80)
-    print("[Dense NN] Training - Target: ~78%")
+    print("[Dense NN] Training - Target: 92.0%")
     print("="*80)
     start = time.time()
     dnn_preds, dnn_acc = train_dense_nn(X_feat_train, y_train, X_feat_test, y_test, epochs=500)
@@ -536,23 +514,23 @@ def run_all_experiments(n_samples=250):
     print(f"Training time: {dnn_time:.1f}s")
     results['dense_nn'] = {'accuracy': float(dnn_acc), 'time': dnn_time}
     
-    # 3. EP
+    # 3. EP (Paper-exact: NO backpropagation)
     print("\n" + "="*80)
     print("[Equilibrium Propagation] Training - Target: 86.4%")
     print("="*80)
     start = time.time()
-    ep_preds, ep_acc = train_ep(X_feat_train, y_train, X_feat_test, y_test, epochs=1000)
+    ep_preds, ep_acc = train_ep(X_feat_train, y_train, X_feat_test, y_test, epochs=100)
     ep_time = time.time() - start
     print(f"\nEP Final Accuracy: {ep_acc:.1%}")
     print(f"Training time: {ep_time:.1f}s")
     results['ep'] = {'accuracy': float(ep_acc), 'time': ep_time}
     
-    # 4. VQC
+    # 4. VQC (Paper-exact: ZZFeatureMap + RealAmplitudes + COBYLA)
     print("\n" + "="*80)
-    print("[VQC] Training - Target: 83%")
+    print("[VQC] Training - Target: 83.0%")
     print("="*80)
     start = time.time()
-    vqc_preds, vqc_acc = train_vqc(X_feat_train, y_train, X_feat_test, y_test)
+    vqc_preds, vqc_acc = train_vqc(X_feat_train, y_train, X_feat_test, y_test, max_iterations=200)
     vqc_time = time.time() - start
     print(f"\nVQC Final Accuracy: {vqc_acc:.1%}")
     print(f"Training time: {vqc_time:.1f}s")
@@ -565,7 +543,7 @@ def run_all_experiments(n_samples=250):
     print(f"\n{'Model':<12} {'Target':<10} {'Achieved':<10} {'Status'}")
     print("-"*50)
     
-    targets = {'cnn': 0.98, 'ep': 0.864, 'vqc': 0.83, 'dense_nn': 0.78}
+    targets = {'cnn': 0.984, 'dense_nn': 0.92, 'ep': 0.864, 'vqc': 0.83}
     
     for model, target in targets.items():
         achieved = results[model]['accuracy']
