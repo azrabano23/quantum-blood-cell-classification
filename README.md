@@ -1,50 +1,8 @@
 # Quantum Blood Cell Classification
-**Proving Quantum Machine Learning is Competitive for Acute Myeloid Leukemia Detection**
+**Comparing Classical and Quantum Machine Learning for Acute Myeloid Leukemia Detection**
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Paper](https://img.shields.io/badge/WCCI%202026-Conference%20Paper-green.svg)](https://github.com/azrabano23/conference-paper-quantum-ml)
-
----
-
-## 🎯 Key Finding: Quantum Methods Are Competitive!
-
-**Quantum and Quantum-inspired methods achieve performance within 12-15% of classical CNNs despite operating under severe constraints (64×64 pixels, 20D features, simulation-only).**
-
-### Performance Comparison (250 samples per class)
-
-| Method | Test Accuracy | Gap from CNN | Training Time | Key Advantage |
-|--------|--------------|--------------|---------------|---------------|
-| **CNN (Classical)** | **98.4%** | — | 745s (12.4 min) | Best accuracy |
-| **Dense NN (Classical)** | **92.0%** | -6.4% | 0.47s | Fastest |
-| **Equilibrium Propagation** | **86.4%** | **-12%** | 89.4s | Quantum-inspired, no backprop |
-| **VQC (Quantum)** | **83.0%** | **-15%** | 180s | **More data efficiency** |
-
-### Dataset Scaling Results
-
-**Classical CNN:**
-- 50 samples: 92.0% (22.5s train)
-- 100 samples: 94.0% (40.7s train)
-- 200 samples: 97.0% (88.1s train)
-- 250 samples: 98.4% (745s train)
-
-**Dense Neural Network:**
-- 50 samples: 92.0% (0.47s train)
-- 100 samples: 80.0% (0.91s train)
-- 200 samples: 88.0% (1.8s train)
-- 250 samples: 85.6% (2.3s train)
-
-**Equilibrium Propagation (Quantum-Inspired):**
-- 50 samples: 82.0% (21.0s train)
-- 100 samples: 84.0% (62.0s train)
-- 200 samples: 85.5% (86.4s train)
-- 250 samples: **86.4%** (89.4s train) ← **Only 12% below CNN!**
-
-**VQC (Quantum) - STABLE ACROSS ALL SCALES:**
-- 50 samples: **83.0%** ← Peak performance with minimal data
-- 100 samples: **83.0%**
-- 200 samples: **83.0%**
-- 250 samples: **83.0%** ← **5× data efficiency vs CNN**
 
 ---
 
@@ -54,27 +12,24 @@ This project **proves Quantum Machine Learning is competitive** with classical m
 
 ### Methods Implemented
 
-1. **Classical CNN** (Best Performance)
+1. **Classical CNN**
    - Architecture: Conv(32) → Conv(64) → Conv(128) → FC(256) → FC(128) → 2 classes
    - Data augmentation: flips, rotation, brightness, zoom
-   - Regularization: dropout (0.6/0.5), weight decay, gradient clipping
+   - Regularization: dropout, weight decay, gradient clipping
    
-2. **Classical Dense NN** (Fastest)
+2. **Classical Dense NN**
    - Architecture: 8 GLCM features → 128 → 64 → 32 → 2 classes
    - Feature extraction: texture analysis (GLCM)
-   - <1 second training time
 
-3. **Equilibrium Propagation** (Quantum-Inspired) — **86.4% accuracy**
+3. **Equilibrium Propagation** (Quantum-Inspired)
    - Architecture: 20 features → 256 → 128 → 64 → 2 classes
-   - Energy-based learning (no backpropagation needed!)
-   - **Only 12% below CNN** — proves Quantum-compatible training works
+   - Energy-based learning (no backpropagation needed)
    - Features: statistical + GLCM + morphology + edge + frequency
 
-4. **Variational Quantum Classifier** (Pure Quantum) — **83% accuracy**
-   - 4-qubit quantum circuit (NISQ-ready: depth 12)
-   - ZZFeatureMap encoding + RealAmplitudes ansatz (8 parameters)
-   - Qiskit 0.39.0 implementation
-   - **Scale-invariant**: 83% from 50 to 250 samples (5× data efficiency!)
+4. **Variational Quantum Classifier** (Pure Quantum)
+   - 4-qubit quantum circuit
+   - ZZFeatureMap encoding + RealAmplitudes ansatz
+   - Qiskit implementation
 
 ---
 ## 🚀 Quick Start
@@ -111,16 +66,16 @@ matplotlib>=3.4.0
 ### Running Experiments
 
 ```bash
-# Run enhanced CNN (98.4% accuracy, ~12 min)
+# Run CNN
 python classical_cnn.py
 
-# Run dense NN (92% accuracy, <1 sec)
+# Run Dense NN
 python classical_dense_nn.py
 
-# Run equilibrium propagation (86.4% accuracy, ~89 sec)
+# Run Equilibrium Propagation
 python equilibrium_propagation.py
 
-# Run quantum VQC (83% accuracy with 5× data efficiency, ~180 sec)
+# Run Variational Quantum Classifier
 python vqc_classifier.py
 
 # Run all experiments and compare
@@ -133,12 +88,10 @@ python run_all_experiments.py
 
 ### Core Implementations
 ```
-classical_cnn.py              # Enhanced CNN with data augmentation (98.4%)
-classical_dense_nn.py         # Fast dense network with GLCM features (92%)
-equilibrium_propagation.py    # Quantum-inspired EP with 20 features (80%)
-equilibrium_propagation_v2.py # Refined EP (experimental)
-vqc_classifier.py            # Variational quantum classifier (83%)
-mit_hybrid_qnn.py            # Hybrid quantum-classical network
+classical_cnn.py              # CNN with data augmentation
+classical_dense_nn.py         # Dense network with GLCM features
+equilibrium_propagation.py    # Quantum-inspired EP with 20 features
+vqc_classifier.py             # Variational quantum classifier
 ```
 
 ### Utilities
