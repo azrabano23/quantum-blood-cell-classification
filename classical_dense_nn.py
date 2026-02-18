@@ -62,9 +62,10 @@ class DenseNN(nn.Module):
 class ClassicalDenseNNClassifier:
     """
     Classical Dense Neural Network Classifier for blood cells
+    Uses same 20 features as EP/VQC for fair comparison
     """
     
-    def __init__(self, input_dim=8, hidden_dims=[128, 64, 32]):
+    def __init__(self, input_dim=20, hidden_dims=[128, 64, 32]):
         self.input_dim = input_dim
         self.hidden_dims = hidden_dims
         self.model = DenseNN(input_dim, hidden_dims)
@@ -74,34 +75,66 @@ class ClassicalDenseNNClassifier:
         self.model.to(self.device)
         
     def extract_features(self, img_path):
-        """Extract texture and statistical features from image"""
+        """Extract 20 features: intensity, GLCM, morphology, edge, frequency (same as EP/VQC)"""
         try:
+            from skimage.measure import regionprops, label
+            from skimage.filters import sobel
+            
             img = imread_collection([img_path])[0]
             
             # Convert to grayscale
             if len(img.shape) == 3:
-                img = np.mean(img, axis=2)
+                img_gray = np.mean(img, axis=2)
+            else:
+                img_gray = img
             
-            # Resize
-            img_resized = resize(img, (32, 32), anti_aliasing=True)
+            # Resize to 64x64 as per paper
+            img_resized = resize(img_gray, (64, 64), anti_aliasing=True)
             img_normalized = (img_resized - img_resized.min()) / (img_resized.max() - img_resized.min() + 1e-8)
             
-            # GLCM texture features
-            img_uint8 = (img_normalized * 255).astype(np.uint8)
-            glcm = graycomatrix(img_uint8, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
-            
             features = []
-            # Statistical features
+            
+            # 1. Intensity statistics (5 features)
             features.append(np.mean(img_normalized))
             features.append(np.std(img_normalized))
             features.append(np.median(img_normalized))
             features.append(np.percentile(img_normalized, 25))
             features.append(np.percentile(img_normalized, 75))
             
-            # Texture features
+            # 2. GLCM texture descriptors (5 features)
+            img_uint8 = (img_normalized * 255).astype(np.uint8)
+            glcm = graycomatrix(img_uint8, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
             features.append(graycoprops(glcm, 'contrast')[0, 0])
+            features.append(graycoprops(glcm, 'dissimilarity')[0, 0])
             features.append(graycoprops(glcm, 'homogeneity')[0, 0])
             features.append(graycoprops(glcm, 'energy')[0, 0])
+            features.append(graycoprops(glcm, 'correlation')[0, 0])
+            
+            # 3. Morphology metrics (4 features)
+            thresh = img_normalized > np.mean(img_normalized)
+            labeled = label(thresh)
+            if labeled.max() > 0:
+                props = regionprops(labeled)[0]
+                features.append(props.area / (64 * 64))
+                features.append(props.eccentricity)
+                features.append(props.solidity)
+                features.append(props.extent)
+            else:
+                features.extend([0.5, 0.5, 0.5, 0.5])
+            
+            # 4. Edge density/variation (3 features)
+            edges = sobel(img_normalized)
+            features.append(np.mean(edges))
+            features.append(np.std(edges))
+            features.append(np.max(edges))
+            
+            # 5. Frequency-domain (FFT) features (3 features)
+            fft = np.fft.fft2(img_normalized)
+            fft_shift = np.fft.fftshift(fft)
+            magnitude = np.abs(fft_shift)
+            features.append(np.mean(magnitude))
+            features.append(np.std(magnitude))
+            features.append(np.max(magnitude))
             
             return np.array(features[:self.input_dim])
             
@@ -241,7 +274,7 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
         print(f"EXPERIMENT: Dense NN with {n_samples} samples per class")
         print("="*80)
         
-        classifier = ClassicalDenseNNClassifier(input_dim=8, hidden_dims=[128, 64, 32])
+        classifier = ClassicalDenseNNClassifier(input_dim=20, hidden_dims=[128, 64, 32])
         
         # Load data
         start_load = time.time()
