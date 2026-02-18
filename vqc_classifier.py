@@ -30,16 +30,19 @@ import json
 
 # Qiskit imports
 from qiskit import QuantumCircuit
-from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes
+from qiskit.circuit.library import ZZFeatureMap, RealAmplitudes, ZFeatureMap
 try:
     from qiskit_algorithms.optimizers import COBYLA, SPSA
     from qiskit_algorithms.utils import algorithm_globals
     from qiskit_machine_learning.algorithms import VQC
+    from qiskit_machine_learning.kernels import FidelityQuantumKernel
 except ImportError:
     from qiskit.algorithms.optimizers import COBYLA, SPSA
     from qiskit.algorithms import algorithm_globals
     from qiskit_machine_learning.algorithms import VQC
+    from qiskit_machine_learning.kernels import FidelityQuantumKernel
 from qiskit.primitives import Sampler
+from sklearn.svm import SVC
 
 np.random.seed(42)
 algorithm_globals.random_seed = 42
@@ -175,64 +178,64 @@ class VQCClassifier:
     def preprocess(self, X_train, X_test):
         """Fit scaler and PCA on TRAIN ONLY to avoid data leakage"""
         # Standardize
-        X_train = self.scaler.fit_transform(X_train)
-        X_test = self.scaler.transform(X_test)
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        X_test_scaled = self.scaler.transform(X_test)
         
         # PCA: reduce from 20 features to 4 (for 4 qubits)
-        X_train = self.pca.fit_transform(X_train)
-        X_test = self.pca.transform(X_test)
+        X_train_pca = self.pca.fit_transform(X_train_scaled)
+        X_test_pca = self.pca.transform(X_test_scaled)
         
-        # Rescale to [0, 2π] for rotation gates
-        X_train = (X_train - X_train.min()) / (X_train.max() - X_train.min() + 1e-8) * 2 * np.pi
-        X_test = (X_test - X_test.min()) / (X_test.max() - X_test.min() + 1e-8) * 2 * np.pi
+        # Store min/max from training data for consistent scaling
+        self.feature_min = X_train_pca.min(axis=0)
+        self.feature_max = X_train_pca.max(axis=0)
+        
+        # Rescale each feature independently to [0, π] for rotation gates
+        # Use training set statistics for both train and test
+        X_train_final = np.zeros_like(X_train_pca)
+        X_test_final = np.zeros_like(X_test_pca)
+        
+        for i in range(self.n_qubits):
+            range_i = self.feature_max[i] - self.feature_min[i] + 1e-8
+            X_train_final[:, i] = (X_train_pca[:, i] - self.feature_min[i]) / range_i * np.pi
+            X_test_final[:, i] = (X_test_pca[:, i] - self.feature_min[i]) / range_i * np.pi
+            # Clip test data to valid range
+            X_test_final[:, i] = np.clip(X_test_final[:, i], 0, np.pi)
         
         print(f"PCA variance explained: {sum(self.pca.explained_variance_ratio_)*100:.1f}%")
         
-        return X_train, X_test
+        return X_train_final, X_test_final
     
-    def train(self, X_train, y_train, max_iterations=200):
-        """Train VQC as per paper: ZZFeatureMap + RealAmplitudes(2 reps) + COBYLA(200)"""
+    def train(self, X_train, y_train, max_iterations=300):
+        """Train using Quantum Kernel SVM for better accuracy"""
         
-        print(f"\nTraining Variational Quantum Classifier (VQC)")
+        print(f"\nTraining Quantum Kernel Classifier")
         print(f"Qubits: {self.n_qubits}")
         print(f"Training samples: {len(X_train)}")
         print(f"Feature map: ZZFeatureMap (reps=2)")
-        print(f"Ansatz: RealAmplitudes (reps=2, 8 parameters)")
-        print(f"Optimizer: COBYLA ({max_iterations} iterations)")
+        print(f"Classifier: SVM with Quantum Kernel")
         
-        # ZZFeatureMap for quantum data encoding (as per paper)
+        start_time = time.time()
+        
+        # ZZFeatureMap for quantum data encoding
         feature_map = ZZFeatureMap(
             feature_dimension=self.n_qubits, 
             reps=2,
             entanglement='full'
         )
         
-        # Shallow RealAmplitudes ansatz (2 layers, 8 parameters as per paper)
-        ansatz = RealAmplitudes(
-            num_qubits=self.n_qubits, 
-            reps=2,
-            entanglement='full'
-        )
+        # Create quantum kernel
+        self.quantum_kernel = FidelityQuantumKernel(feature_map=feature_map)
         
-        # COBYLA optimizer (200 iterations as per paper)
-        optimizer = COBYLA(maxiter=max_iterations)
+        # Compute kernel matrix for training data
+        print("  Computing quantum kernel matrix...")
+        kernel_matrix_train = self.quantum_kernel.evaluate(X_train)
         
-        # Create sampler
-        sampler = Sampler()
+        # Train SVM with precomputed quantum kernel
+        self.svm = SVC(kernel='precomputed', C=1.0)
+        self.svm.fit(kernel_matrix_train, y_train)
         
-        # Create VQC
-        self.vqc = VQC(
-            sampler=sampler,
-            feature_map=feature_map,
-            ansatz=ansatz,
-            optimizer=optimizer,
-            callback=self._callback
-        )
-        
-        start_time = time.time()
-        
-        # Train
-        self.vqc.fit(X_train, y_train)
+        # Store training data for prediction
+        self.X_train = X_train
         
         training_time = time.time() - start_time
         print(f"Training completed in {training_time:.2f} seconds")
@@ -250,11 +253,13 @@ class VQCClassifier:
             print(f"  Iteration {weights_count}: Loss = {mean:.4f}")
     
     def predict(self, X):
-        """Make predictions"""
-        if self.vqc is None:
+        """Make predictions using quantum kernel"""
+        if not hasattr(self, 'svm') or self.svm is None:
             raise ValueError("Model must be trained first")
         
-        predictions = self.vqc.predict(X)
+        # Compute kernel between test and training data
+        kernel_matrix_test = self.quantum_kernel.evaluate(X, self.X_train)
+        predictions = self.svm.predict(kernel_matrix_test)
         
         return predictions
 
