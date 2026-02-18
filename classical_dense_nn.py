@@ -153,12 +153,15 @@ class ClassicalDenseNNClassifier:
         X = np.array(X)
         y = np.array(y)
         
-        # Standardize
-        X = self.scaler.fit_transform(X)
-        
         print(f"Loaded {len(X)} samples: Healthy={class_counts['healthy']}, AML={class_counts['aml']}")
         
         return X, y
+    
+    def preprocess(self, X_train, X_test):
+        """Fit scaler on TRAIN ONLY to avoid data leakage"""
+        X_train = self.scaler.fit_transform(X_train)
+        X_test = self.scaler.transform(X_test)  # transform only, no fit!
+        return X_train, X_test
     
     def train(self, X_train, y_train, epochs=100, batch_size=32, learning_rate=0.001):
         """Train the dense neural network"""
@@ -253,6 +256,9 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.25, random_state=42, stratify=y
         )
+        
+        # Preprocess AFTER split to avoid data leakage
+        X_train, X_test = classifier.preprocess(X_train, X_test)
         
         # Train
         train_time = classifier.train(X_train, y_train, epochs=100, batch_size=16)
