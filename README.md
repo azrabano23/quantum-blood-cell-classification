@@ -8,32 +8,28 @@
 
 ## Project Overview
 
-This project **proves Quantum Machine Learning is competitive** with classical methods for real-world medical imaging. We compare classical, Quantum-inspired, and pure Quantum approaches for automated detection of Acute Myeloid Leukemia (AML) from blood cell microscopy images.
+This branch contains experimental methods comparing classical, quantum-inspired, and quantum approaches for automated detection of Acute Myeloid Leukemia (AML) from blood cell microscopy images.
 
 ### Methods Implemented
 
 1. **Classical CNN**
    - Architecture: Conv(32) → Conv(64) → Conv(128) → FC(256) → FC(128) → 2 classes
    - Data augmentation: flips, rotation, brightness, zoom
-   - Regularization: dropout, weight decay, gradient clipping
    
 2. **Classical Dense NN**
-   - Architecture: 8 GLCM features → 128 → 64 → 32 → 2 classes
-   - Feature extraction: texture analysis (GLCM)
+   - Architecture: 20 features → 128 → 64 → 32 → 2 classes
+   - Feature extraction: intensity, GLCM, morphology, edge, frequency
 
 3. **Equilibrium Propagation** (Quantum-Inspired)
    - Architecture: 20 features → 256 → 128 → 64 → 2 classes
-   - Energy-based learning (no backpropagation needed)
-   - Features: statistical + GLCM + morphology + edge + frequency
+   - Energy-based learning (no backpropagation)
 
-4. **Variational Quantum Classifier** (Pure Quantum)
-   - 4-qubit quantum circuit
-   - ZZFeatureMap encoding + RealAmplitudes ansatz
+4. **Variational Quantum Classifier** (Quantum)
+   - 4-qubit quantum circuit with ZZFeatureMap
    - Qiskit implementation
 
 5. **MIT Hybrid QNN** (Quantum-Classical Hybrid)
    - Hybrid architecture combining quantum and classical layers
-   - Feature extraction with quantum encoding
 
 ---
 ## 🚀 Quick Start
@@ -148,30 +144,6 @@ Matek, C., Schwarz, S., Marr, C., & Spiekermann, K. (2019). *A Single-cell Morph
 - **Qiskit Documentation**: [qiskit.org/documentation](https://qiskit.org/documentation/)
 - **IBM Quantum**: [quantum-computing.ibm.com](https://quantum-computing.ibm.com/)
 - **Qiskit Machine Learning**: [qiskit.org/ecosystem/machine-learning](https://qiskit.org/ecosystem/machine-learning/)
-
----
-
-## 📝 Citation
-
-If you use this work, please cite:
-
-```bibtex
-@inproceedings{bano2026quantum,
-  author = {Bano, Azra and Liebovitch, Larry S.},
-  title = {Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia},
-  booktitle = {IEEE World Congress on Computational Intelligence (WCCI)},
-  year = {2026},
-  note = {Special Session on Quantum Machine Learning},
-  url = {https://github.com/azrabano23/conference-paper-quantum-ml}
-}
-
-@software{bano2024quantum_code,
-  author = {Bano, Azra},
-  title = {Quantum Blood Cell Classification: Implementation Code},
-  year = {2024},
-  url = {https://github.com/azrabano23/quantum-blood-cell-classification}
-}
-```
 
 ---
 
