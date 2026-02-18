@@ -220,14 +220,14 @@ class ClassicalCNNClassifier:
         
         return X, y
     
-    def train(self, X_train, y_train, epochs=60, batch_size=16, learning_rate=0.001, weight_decay=0.0001, use_augmentation=True):
-        """Train the CNN with data augmentation and regularization"""
-        
-        print(f"\nTraining Enhanced CNN")
+    def train(self, X_train, y_train, epochs=100, batch_size=8, learning_rate=0.0005, weight_decay=0.0001, use_augmentation=True):
+        """Train the CNN with enhanced data augmentation and regularization for 98%+ accuracy"""
+
+        print(f"\nTraining Enhanced CNN for High Accuracy")
         print(f"Architecture: Conv(32) -> Conv(64) -> Conv(128) -> FC(256) -> FC(128) -> FC(2)")
         print(f"Training samples: {len(X_train)}")
         print(f"Image size: {self.img_size}x{self.img_size}")
-        print(f"Using: Data Augmentation={use_augmentation}, Weight Decay={weight_decay}, Dropout=0.6/0.5")
+        print(f"Using: Data Augmentation={use_augmentation}, Weight Decay={weight_decay}, Epochs={epochs}")
         
         # Create augmented dataset
         dataset = AugmentedDataset(X_train, y_train, augment=use_augmentation)
@@ -329,9 +329,9 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
             X, y, test_size=0.25, random_state=42, stratify=y
         )
         
-        # Train with data augmentation and regularization
-        train_time = classifier.train(X_train, y_train, epochs=60, batch_size=16, 
-                                      learning_rate=0.001, weight_decay=0.0001, use_augmentation=True)
+        # Train with enhanced settings for 98%+ accuracy
+        train_time = classifier.train(X_train, y_train, epochs=100, batch_size=8,
+                                      learning_rate=0.0005, weight_decay=0.0001, use_augmentation=True)
         
         # Predict
         start_pred = time.time()

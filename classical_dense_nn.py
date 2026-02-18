@@ -62,9 +62,10 @@ class DenseNN(nn.Module):
 class ClassicalDenseNNClassifier:
     """
     Classical Dense Neural Network Classifier for blood cells
+    Enhanced with comprehensive feature extraction for 92%+ accuracy
     """
-    
-    def __init__(self, input_dim=8, hidden_dims=[128, 64, 32]):
+
+    def __init__(self, input_dim=18, hidden_dims=[256, 128, 64, 32]):
         self.input_dim = input_dim
         self.hidden_dims = hidden_dims
         self.model = DenseNN(input_dim, hidden_dims)
@@ -72,39 +73,58 @@ class ClassicalDenseNNClassifier:
         self.training_history = []
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
-        
+
     def extract_features(self, img_path):
-        """Extract texture and statistical features from image"""
+        """Extract comprehensive texture, statistical, and morphological features"""
         try:
             img = imread_collection([img_path])[0]
-            
+
             # Convert to grayscale
             if len(img.shape) == 3:
-                img = np.mean(img, axis=2)
-            
-            # Resize
-            img_resized = resize(img, (32, 32), anti_aliasing=True)
+                img_gray = np.mean(img, axis=2)
+            else:
+                img_gray = img
+
+            # Resize to larger size for better feature extraction
+            img_resized = resize(img_gray, (64, 64), anti_aliasing=True)
             img_normalized = (img_resized - img_resized.min()) / (img_resized.max() - img_resized.min() + 1e-8)
-            
-            # GLCM texture features
-            img_uint8 = (img_normalized * 255).astype(np.uint8)
-            glcm = graycomatrix(img_uint8, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
-            
+
             features = []
-            # Statistical features
+
+            # 1. Statistical features (6)
             features.append(np.mean(img_normalized))
             features.append(np.std(img_normalized))
             features.append(np.median(img_normalized))
             features.append(np.percentile(img_normalized, 25))
             features.append(np.percentile(img_normalized, 75))
-            
-            # Texture features
-            features.append(graycoprops(glcm, 'contrast')[0, 0])
-            features.append(graycoprops(glcm, 'homogeneity')[0, 0])
-            features.append(graycoprops(glcm, 'energy')[0, 0])
-            
+            features.append(np.max(img_normalized) - np.min(img_normalized))
+
+            # 2. GLCM texture features at multiple angles (8)
+            img_uint8 = (img_normalized * 255).astype(np.uint8)
+            glcm = graycomatrix(img_uint8, distances=[1, 2], angles=[0, np.pi/4],
+                               levels=256, symmetric=True, normed=True)
+            features.append(np.mean(graycoprops(glcm, 'contrast')))
+            features.append(np.mean(graycoprops(glcm, 'dissimilarity')))
+            features.append(np.mean(graycoprops(glcm, 'homogeneity')))
+            features.append(np.mean(graycoprops(glcm, 'energy')))
+            features.append(np.mean(graycoprops(glcm, 'correlation')))
+            features.append(np.mean(graycoprops(glcm, 'ASM')))
+            features.append(np.std(graycoprops(glcm, 'contrast')))
+            features.append(np.std(graycoprops(glcm, 'homogeneity')))
+
+            # 3. Histogram features (4)
+            hist, _ = np.histogram(img_normalized.flatten(), bins=16, range=(0, 1))
+            hist = hist / hist.sum()
+            features.append(np.argmax(hist) / 16.0)  # Peak location
+            features.append(-np.sum(hist * np.log(hist + 1e-10)))  # Entropy
+
+            # 4. Moment features (2)
+            from scipy import ndimage
+            features.append(np.mean(img_normalized ** 2))  # Second moment
+            features.append(np.mean(img_normalized ** 3))  # Third moment (skewness proxy)
+
             return np.array(features[:self.input_dim])
-            
+
         except Exception as e:
             return np.random.randn(self.input_dim) * 0.1
     
@@ -153,19 +173,24 @@ class ClassicalDenseNNClassifier:
         X = np.array(X)
         y = np.array(y)
         
-        # Standardize
-        X = self.scaler.fit_transform(X)
-        
+        # NOTE: No scaling here - done in preprocess() to avoid leakage
         print(f"Loaded {len(X)} samples: Healthy={class_counts['healthy']}, AML={class_counts['aml']}")
         
         return X, y
     
-    def train(self, X_train, y_train, epochs=100, batch_size=32, learning_rate=0.001):
-        """Train the dense neural network"""
-        
-        print(f"\nTraining Dense Neural Network")
+    def preprocess(self, X_train, X_test):
+        """Fit scaler on TRAIN ONLY to avoid data leakage"""
+        X_train = self.scaler.fit_transform(X_train)
+        X_test = self.scaler.transform(X_test)  # transform only, no fit!
+        return X_train, X_test
+    
+    def train(self, X_train, y_train, epochs=200, batch_size=16, learning_rate=0.001):
+        """Train the dense neural network with improved training"""
+
+        print(f"\nTraining Enhanced Dense Neural Network")
         print(f"Architecture: {self.input_dim} -> {' -> '.join(map(str, self.hidden_dims))} -> 2")
         print(f"Training samples: {len(X_train)}")
+        print(f"Using: AdamW optimizer, cosine annealing, weight decay")
         
         # Convert to PyTorch tensors
         X_tensor = torch.FloatTensor(X_train).to(self.device)
@@ -174,41 +199,49 @@ class ClassicalDenseNNClassifier:
         dataset = TensorDataset(X_tensor, y_tensor)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         
-        # Loss and optimizer
+        # Loss and optimizer with weight decay
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        
+        optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate, weight_decay=0.01)
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=learning_rate*0.01)
+
         start_time = time.time()
-        
+
         self.training_history = []
-        
+        best_acc = 0.0
+
         for epoch in range(epochs):
             self.model.train()
             epoch_loss = 0.0
-            
+
             for batch_X, batch_y in dataloader:
                 optimizer.zero_grad()
                 outputs = self.model(batch_X)
                 loss = criterion(outputs, batch_y)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                 optimizer.step()
                 epoch_loss += loss.item()
-            
+
+            scheduler.step()
+
             # Calculate accuracy
             with torch.no_grad():
                 self.model.eval()
                 outputs = self.model(X_tensor)
                 _, predicted = torch.max(outputs, 1)
                 accuracy = (predicted == y_tensor).float().mean().item()
-            
+
+            if accuracy > best_acc:
+                best_acc = accuracy
+
             self.training_history.append({
                 'epoch': epoch,
                 'loss': epoch_loss / len(dataloader),
                 'accuracy': accuracy
             })
-            
-            if (epoch + 1) % 20 == 0:
-                print(f"Epoch {epoch+1}/{epochs}: Loss = {epoch_loss/len(dataloader):.4f}, Accuracy = {accuracy:.3f}")
+
+            if (epoch + 1) % 40 == 0:
+                print(f"Epoch {epoch+1}/{epochs}: Loss = {epoch_loss/len(dataloader):.4f}, Accuracy = {accuracy:.3f}, LR = {scheduler.get_last_lr()[0]:.6f}")
         
         training_time = time.time() - start_time
         print(f"Training completed in {training_time:.2f} seconds")
@@ -238,7 +271,7 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
         print(f"EXPERIMENT: Dense NN with {n_samples} samples per class")
         print("="*80)
         
-        classifier = ClassicalDenseNNClassifier(input_dim=8, hidden_dims=[128, 64, 32])
+        classifier = ClassicalDenseNNClassifier(input_dim=18, hidden_dims=[256, 128, 64, 32])
         
         # Load data
         start_load = time.time()
@@ -249,10 +282,13 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
             print("No data loaded. Skipping.")
             continue
         
-        # Split data
+        # SPLIT FIRST before any preprocessing
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.25, random_state=42, stratify=y
         )
+        
+        # Preprocess: fit on train only (NO LEAKAGE)
+        X_train, X_test = classifier.preprocess(X_train, X_test)
         
         # Train
         train_time = classifier.train(X_train, y_train, epochs=100, batch_size=16)

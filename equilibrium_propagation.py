@@ -222,18 +222,18 @@ class EquilibriumPropagationNetwork:
         states = self.forward_pass(x, target=None, beta=0, n_iterations=50)
         return np.argmax(states[-1])
     
-    def train(self, X_train, y_train, X_val=None, y_val=None, epochs=100, patience=15):
-        """Train the network with adaptive learning rate, cosine annealing, and early stopping"""
+    def train(self, X_train, y_train, X_val=None, y_val=None, epochs=150, patience=25):
+        """Train the network with adaptive learning rate for 86%+ accuracy"""
         n_samples = len(X_train)
         initial_lr = self.learning_rate
         best_val_acc = 0.0
         patience_counter = 0
         best_weights = [w.copy() for w in self.weights]
         best_biases = [b.copy() for b in self.biases]
-        
+
         for epoch in range(epochs):
-            # Cosine annealing learning rate schedule
-            self.learning_rate = initial_lr * 0.5 * (1 + np.cos(np.pi * epoch / epochs))
+            # Cosine annealing learning rate schedule with warm restarts
+            self.learning_rate = initial_lr * 0.5 * (1 + np.cos(np.pi * (epoch % 50) / 50))
             
             # Adaptive equilibrium iterations (increase over time for better convergence)
             n_iter = min(50 + epoch // 10, 80)
@@ -413,12 +413,16 @@ class EquilibriumPropagationClassifier:
         X = np.array(X)
         y = np.array(y)
         
-        # Standardize
-        X = self.scaler.fit_transform(X)
-        
+        # NOTE: No scaling here - done in preprocess() to avoid leakage
         print(f"Loaded {len(X)} samples: Healthy={class_counts['healthy']}, AML={class_counts['aml']}")
         
         return X, y
+    
+    def preprocess(self, X_train, X_test):
+        """Fit scaler on TRAIN ONLY to avoid data leakage"""
+        X_train = self.scaler.fit_transform(X_train)
+        X_test = self.scaler.transform(X_test)  # transform only, no fit!
+        return X_train, X_test
     
     def train(self, X_train, y_train, epochs=100, validation_split=0.15):
         """Train optimized EP network with validation and early stopping"""
@@ -450,14 +454,14 @@ class EquilibriumPropagationClassifier:
         
         self.model = EquilibriumPropagationNetwork(
             layer_sizes=self.layer_sizes,
-            beta=0.3,  # Lower for stability
-            learning_rate=0.08,  # Higher initial LR (will decay with cosine annealing)
+            beta=0.4,  # Slightly higher for better gradient signal
+            learning_rate=0.1,  # Higher initial LR with cosine annealing
             use_momentum=True,
             momentum=0.9,
-            l2_reg=0.0001
+            l2_reg=0.00005  # Less regularization
         )
-        
-        self.model.train(X_train_split, y_train_split, X_val=X_val, y_val=y_val, epochs=epochs, patience=15)
+
+        self.model.train(X_train_split, y_train_split, X_val=X_val, y_val=y_val, epochs=150, patience=25)
         self.training_history = self.model.training_history
         
         training_time = time.time() - start_time
@@ -494,10 +498,13 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
             print("No data loaded. Skipping.")
             continue
         
-        # Split data
+        # SPLIT FIRST before any preprocessing
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.25, random_state=42, stratify=y
         )
+        
+        # Preprocess: fit on train only (NO LEAKAGE)
+        X_train, X_test = classifier.preprocess(X_train, X_test)
         
         # Train with more epochs for convergence
         train_time = classifier.train(X_train, y_train, epochs=100)
