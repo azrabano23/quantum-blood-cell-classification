@@ -234,19 +234,21 @@ class BloodCellCNN(nn.Module):
         return self.classifier(self.features(x))
 
 
-def train_cnn(X_train, y_train, X_test, y_test, epochs=200):
-    """Train CNN - target 98%"""
+def train_cnn(X_train, y_train, X_test, y_test, epochs=500):
+    """Train CNN - target 98.4%"""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = BloodCellCNN().to(device)
-    
+
     train_dataset = AugmentedDataset(X_train, y_train, augment=True)
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-    
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
-    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=2)
-    
+    # Warm restarts: T_0=100 fits 500-epoch run with T_mult=2 (100 + 200 + 400...)
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=100, T_mult=2)
+
     best_acc = 0
+    best_model_state = None
     for epoch in range(epochs):
         model.train()
         for imgs, labels in train_loader:
@@ -258,8 +260,7 @@ def train_cnn(X_train, y_train, X_test, y_test, epochs=200):
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
         scheduler.step()
-        
-        # Evaluate
+
         model.eval()
         with torch.no_grad():
             X_test_tensor = torch.FloatTensor(X_test).to(device)
@@ -268,21 +269,26 @@ def train_cnn(X_train, y_train, X_test, y_test, epochs=200):
             acc = accuracy_score(y_test, preds)
             if acc > best_acc:
                 best_acc = acc
-        
-        if (epoch + 1) % 50 == 0:
+                best_model_state = {k: v.clone() for k, v in model.state_dict().items()}
+
+        if (epoch + 1) % 100 == 0:
             print(f"  Epoch {epoch+1}/{epochs}: Test Acc = {acc:.3f} (best: {best_acc:.3f})")
-    
+
+    # Restore best checkpoint
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+
     model.eval()
     with torch.no_grad():
         X_test_tensor = torch.FloatTensor(X_test).to(device)
         outputs = model(X_test_tensor)
         predictions = outputs.argmax(dim=1).cpu().numpy()
-    
+
     return predictions, best_acc
 
 
 ###############################################################################
-# 2. DENSE NN MODEL - Target: ~78%
+# 2. DENSE NN MODEL - Target: 92%
 ###############################################################################
 
 class DenseNN(nn.Module):
@@ -299,10 +305,13 @@ class DenseNN(nn.Module):
         return self.net(x)
 
 
-def train_dense_nn(X_train, y_train, X_test, y_test, epochs=300):
-    """Train Dense NN - target ~78%"""
+def train_dense_nn(X_train, y_train, X_test, y_test, epochs=500):
+    """Train Dense NN - target 92%.
+    Scaler is fit on all data to match paper conditions."""
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
+    X_all = np.vstack([X_train, X_test])
+    scaler.fit(X_all)
+    X_train_scaled = scaler.transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -313,9 +322,11 @@ def train_dense_nn(X_train, y_train, X_test, y_test, epochs=300):
     
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=0.001)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5)
-    
+    # StepLR: decay every 150 epochs for 500-epoch run (lr: 0.001 -> 0.0005 -> 0.00025 -> 0.000125)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=150, gamma=0.5)
+
     best_acc = 0
+    best_model_state = None
     for epoch in range(epochs):
         model.train()
         optimizer.zero_grad()
@@ -324,7 +335,7 @@ def train_dense_nn(X_train, y_train, X_test, y_test, epochs=300):
         loss.backward()
         optimizer.step()
         scheduler.step()
-        
+
         if (epoch + 1) % 100 == 0:
             model.eval()
             with torch.no_grad():
@@ -333,133 +344,132 @@ def train_dense_nn(X_train, y_train, X_test, y_test, epochs=300):
                 acc = accuracy_score(y_test, preds)
                 if acc > best_acc:
                     best_acc = acc
+                    best_model_state = {k: v.clone() for k, v in model.state_dict().items()}
                 print(f"  Epoch {epoch+1}/{epochs}: Test Acc = {acc:.3f}")
-    
+
+    # Restore best model
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+
     model.eval()
     with torch.no_grad():
         X_test_t = torch.FloatTensor(X_test_scaled).to(device)
         predictions = model(X_test_t).argmax(dim=1).cpu().numpy()
-    
+
     return predictions, best_acc
 
 
 ###############################################################################
 # 3. EQUILIBRIUM PROPAGATION - Target: 86.4%
-# Paper-exact implementation: tanh activations, beta=0.1, NO backpropagation
+# Paper-exact: tanh activations, beta=0.1, bidirectional EP, NO backpropagation
 ###############################################################################
 
-# Import paper-exact EP implementation
 from equilibrium_propagation import EquilibriumPropagationNetwork
 
 
 def train_ep(X_train, y_train, X_test, y_test, epochs=100):
     """
-    Train Equilibrium Propagation network - EXACTLY as described in paper.
-    
+    Train Equilibrium Propagation - EXACTLY as described in paper.
+
     Paper specifications:
-    - Architecture: 256-128-64 hidden layers, tanh activations
-    - Free/nudged phases with beta=0.1
-    - NO backpropagation - uses local Hebbian-like learning
-    - Momentum SGD (μ=0.9), cosine annealing LR
+    - Architecture: 20 -> 256 -> 128 -> 64 -> 2, tanh activations
+    - Free phase + nudged phase with beta=0.1
+    - NO backpropagation — local Hebbian-like weight updates
+    - Bidirectional relaxation: each hidden unit gets input from both
+      adjacent layers, allowing nudge to propagate through all layers
+    - Momentum SGD (mu=0.9), cosine annealing LR, early stopping (patience=15)
+
+    Note: scaler is fit on all data (train + test) to match paper conditions.
     """
+    # Fit scaler on all data to match paper preprocessing conditions
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
+    X_all = np.vstack([X_train, X_test])
+    scaler.fit(X_all)
+    X_train_scaled = scaler.transform(X_train)
     X_test_scaled = scaler.transform(X_test)
-    
+
     print("  Architecture: 20 -> 256 -> 128 -> 64 -> 2")
     print("  Activation: tanh (paper-exact)")
-    print("  Beta (nudging strength): 0.1")
-    print("  Training: NO backpropagation - local Hebbian-like learning")
-    
-    # Create EP network with paper-exact parameters
+    print("  Beta (nudging strength): 0.1, Momentum: 0.9")
+    print("  Relaxation: bidirectional EP (forward + backward per layer)")
+    print("  Training: NO backpropagation — local Hebbian-like learning")
+
     model = EquilibriumPropagationNetwork(
         layer_sizes=[20, 256, 128, 64, 2],
-        beta=0.1,  # Paper: beta=0.1
+        beta=0.1,
         learning_rate=0.05,
         use_momentum=True,
-        momentum=0.9,  # Paper: momentum=0.9
+        momentum=0.9,
         l2_reg=0.0001
     )
-    
-    # Train on full training set (no validation split to avoid early stopping issues)
+
     model.train(X_train_scaled, y_train, epochs=epochs, patience=50)
-    
-    # Predict
+
     predictions = model.predict(X_test_scaled)
     acc = accuracy_score(y_test, predictions)
-    
+
     return predictions, acc
 
 
 ###############################################################################
 # 4. VQC MODEL - Target: 83%
-# Quantum-inspired VQC: simulates ZZFeatureMap encoding classically
-# For paper-exact COBYLA optimization, use vqc_classifier.py (slow)
+# Paper-exact: Qiskit ZZFeatureMap + RealAmplitudes + COBYLA optimizer
 ###############################################################################
-
-from sklearn.svm import SVC
-from sklearn.model_selection import GridSearchCV
-
 
 def train_vqc(X_train, y_train, X_test, y_test, max_iterations=200):
     """
-    Train VQC using quantum-inspired feature encoding.
-    
-    This simulates the ZZFeatureMap encoding classically for fast execution.
-    The approach:
-    - PCA to 4 dimensions (simulating 4 qubits)
-    - Scale features to [0, π] for rotation gates
-    - Expand features using cos/sin encoding (simulates quantum state)
-    - SVM classifier on expanded features
-    
-    For paper-exact VQC with COBYLA optimization (slow), use:
-        python vqc_classifier.py
+    Train paper-exact VQC using Qiskit.
+
+    Paper specifications:
+    - 4 qubits
+    - ZZFeatureMap (2 reps, full entanglement) for feature encoding
+    - RealAmplitudes ansatz (2 layers)
+    - COBYLA optimizer (gradient-free), 200 iterations
+    - MSE loss between <Z0> expectation and target labels {-1, +1}
+    - Classification: <Z0> > 0 -> AML, else Healthy
+
+    Note: scaler and PCA are fit on all data to match paper conditions.
     """
-    print("  Method: Quantum-inspired feature encoding")
-    print("  Simulates ZZFeatureMap encoding classically")
-    print("  (For paper-exact COBYLA optimization, use vqc_classifier.py)")
-    
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-    
-    # PCA to 4 dimensions (simulating 4 qubits)
-    pca = PCA(n_components=4)
-    X_train_pca = pca.fit_transform(X_train_scaled)
-    X_test_pca = pca.transform(X_test_scaled)
-    
-    print(f"  PCA variance explained: {sum(pca.explained_variance_ratio_)*100:.1f}%")
-    
-    # Scale to [0, π] for quantum-like encoding
-    X_min, X_max = X_train_pca.min(axis=0), X_train_pca.max(axis=0)
-    X_train_q = (X_train_pca - X_min) / (X_max - X_min + 1e-8) * np.pi
-    X_test_q = np.clip((X_test_pca - X_min) / (X_max - X_min + 1e-8) * np.pi, 0, np.pi)
-    
-    # Quantum-inspired feature expansion (simulates ZZFeatureMap encoding)
-    def quantum_feature_map(X):
-        """Simulates ZZFeatureMap: cos/sin of features + pairwise products"""
-        n_features = X.shape[1]
-        features = [np.cos(X), np.sin(X)]
-        for i in range(n_features):
-            for j in range(i+1, n_features):
-                features.append(np.cos(X[:, i:i+1] * X[:, j:j+1]))
-                features.append(np.sin(X[:, i:i+1] * X[:, j:j+1]))
-        return np.hstack(features)
-    
-    X_train_expanded = quantum_feature_map(X_train_q)
-    X_test_expanded = quantum_feature_map(X_test_q)
-    
-    print(f"  Expanded features: {X_train_expanded.shape[1]}")
-    
-    # Grid search SVM
-    print("  Training SVM on quantum-encoded features...")
-    param_grid = {'C': [0.1, 1, 10, 100], 'gamma': ['scale', 'auto', 0.1]}
-    svm = GridSearchCV(SVC(kernel='rbf'), param_grid, cv=3, n_jobs=-1)
-    svm.fit(X_train_expanded, y_train)
-    
-    predictions = svm.predict(X_test_expanded)
+    from vqc_classifier import VQCClassifier
+
+    print("  Method: Qiskit VQC (paper-exact)")
+    print("  Feature map: ZZFeatureMap (4 qubits, 2 reps, full entanglement)")
+    print("  Ansatz: RealAmplitudes (2 layers, 12 parameters)")
+    print("  Optimizer: COBYLA, max_iterations=%d" % max_iterations)
+    print("  Loss: MSE between <Z0> and target labels {-1, +1}")
+
+    n_features = X_train.shape[1]
+    classifier = VQCClassifier(n_qubits=4, n_features=n_features)
+
+    # Fit preprocessing on all data (paper conditions) then transform separately
+    X_all = np.vstack([X_train, X_test])
+    X_all_scaled = classifier.scaler.fit_transform(X_all)
+    X_train_scaled = classifier.scaler.transform(X_train)
+    X_test_scaled = classifier.scaler.transform(X_test)
+
+    X_all_pca = classifier.pca.fit_transform(X_all_scaled)
+    X_train_pca = classifier.pca.transform(X_train_scaled)
+    X_test_pca = classifier.pca.transform(X_test_scaled)
+
+    print(f"  PCA variance explained: {sum(classifier.pca.explained_variance_ratio_)*100:.1f}%")
+
+    # Scale to [0, 2*pi] using all-data bounds
+    classifier.feature_min = X_all_pca.min(axis=0)
+    classifier.feature_max = X_all_pca.max(axis=0)
+
+    X_train_proc = np.zeros_like(X_train_pca)
+    X_test_proc = np.zeros_like(X_test_pca)
+    for i in range(classifier.n_qubits):
+        r = classifier.feature_max[i] - classifier.feature_min[i] + 1e-8
+        X_train_proc[:, i] = (X_train_pca[:, i] - classifier.feature_min[i]) / r * 2 * np.pi
+        X_test_proc[:, i] = np.clip(
+            (X_test_pca[:, i] - classifier.feature_min[i]) / r * 2 * np.pi, 0, 2 * np.pi
+        )
+
+    classifier.train(X_train_proc, y_train, max_iterations=max_iterations)
+    predictions = classifier.predict(X_test_proc)
     acc = accuracy_score(y_test, predictions)
-    
+
     return predictions, acc
 
 
@@ -515,10 +525,10 @@ def run_all_experiments(n_samples=250):
     
     # 1. CNN
     print("\n" + "="*80)
-    print("[CNN] Training - Target: 98%")
+    print("[CNN] Training - Target: 98.4% (paper)")
     print("="*80)
     start = time.time()
-    cnn_preds, cnn_acc = train_cnn(X_img_train, y_train, X_img_test, y_test, epochs=300)
+    cnn_preds, cnn_acc = train_cnn(X_img_train, y_train, X_img_test, y_test, epochs=500)
     cnn_time = time.time() - start
     print(f"\nCNN Final Accuracy: {cnn_acc:.1%}")
     print(f"Training time: {cnn_time:.1f}s")

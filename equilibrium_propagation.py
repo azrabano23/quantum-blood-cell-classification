@@ -120,45 +120,61 @@ class EquilibriumPropagationNetwork:
         
         return energy
     
-    def forward_pass(self, x, target=None, beta=0, n_iterations=50):
+    def forward_pass(self, x, target=None, beta=0, n_iterations=100):
         """
-        Relax the network to equilibrium with improved stability and state normalization
-        
+        Relax the network to equilibrium using BIDIRECTIONAL updates (paper-exact EP).
+
+        In true Equilibrium Propagation (Scellier & Bengio 2017), each neuron
+        receives input from BOTH adjacent layers (forward + backward), creating
+        real energy-based equilibria. The nudged phase propagates target
+        information backward through all layers via this bidirectional relaxation —
+        this is what allows EP to compute meaningful gradients for ALL weight layers.
+
+        With forward-only relaxation, the nudging at the output never influences
+        hidden states, so only the final weight layer learns. Bidirectional
+        relaxation is the correct EP algorithm.
+
         Args:
             x: Input data
             target: Target output (for nudged phase)
-            beta: Nudging strength
-            n_iterations: Number of relaxation iterations (more for stability)
+            beta: Nudging strength (paper: 0.1)
+            n_iterations: Max relaxation iterations (stops early at convergence)
         """
-        # Initialize states with better initialization
+        # Initialize via forward pass for better starting point
         states = [x.copy()]
         for i in range(1, self.n_layers):
-            # Initialize closer to expected activation range
-            states.append(np.ones(self.layer_sizes[i]) * 0.5 + 
-                         np.random.randn(self.layer_sizes[i]) * 0.1)
-        
-        # Relax to equilibrium with adaptive step size
-        alpha = 0.3  # Slower, more stable updates
-        
+            h = states[i-1] @ self.weights[i-1] + self.biases[i-1]
+            states.append(tanh(h))
+
+        alpha = 0.5  # Step size for state updates
+
         for iteration in range(n_iterations):
-            # Update each layer (except input) with damping
-            for i in range(1, self.n_layers):
-                # Compute input to this layer
-                h = states[i-1] @ self.weights[i-1] + self.biases[i-1]
-                
-                # Add nudging to output layer if in nudged phase
-                if i == self.n_layers - 1 and target is not None:
-                    h += beta * (target - states[i])
-                
-                # Update state using tanh activation as per paper
+            prev_states = [s.copy() for s in states]
+
+            # Update hidden layers: bidirectional
+            # Each hidden unit gets input from BOTH the previous layer (forward)
+            # AND the next layer (backward, using transposed weights for symmetry)
+            for i in range(1, self.n_layers - 1):
+                h = states[i-1] @ self.weights[i-1] + self.biases[i-1]   # forward
+                h += states[i+1] @ self.weights[i].T                      # backward
                 new_state = tanh(h)
-                
-                # Clip to valid range for stability
-                new_state = np.clip(new_state, -0.99, 0.99)
-                
-                # Smooth update for equilibrium convergence
                 states[i] = (1 - alpha) * states[i] + alpha * new_state
-        
+
+            # Update output layer (with optional nudging for nudged phase)
+            h = states[-2] @ self.weights[-1] + self.biases[-1]
+            if target is not None and beta > 0:
+                h += beta * (target - states[-1])
+            new_state = tanh(h)
+            states[-1] = (1 - alpha) * states[-1] + alpha * new_state
+
+            # Stop early once equilibrium is reached
+            max_change = max(
+                np.max(np.abs(states[i] - prev_states[i]))
+                for i in range(1, self.n_layers)
+            )
+            if max_change < 1e-4:
+                break
+
         return states
     
     def train_sample(self, x, y):
@@ -178,11 +194,12 @@ class EquilibriumPropagationNetwork:
         target = np.zeros(self.layer_sizes[-1])
         target[y] = 1.0
         
-        # Free phase (beta = 0) - more iterations for stability
-        states_free = self.forward_pass(x, target=None, beta=0, n_iterations=50)
-        
-        # Nudged phase (beta > 0)
-        states_nudged = self.forward_pass(x, target=target, beta=self.beta, n_iterations=50)
+        # Free phase: network settles to equilibrium with no supervision
+        states_free = self.forward_pass(x, target=None, beta=0)
+
+        # Nudged phase: output nudged toward target; bidirectional relaxation
+        # propagates this nudge back through all hidden layers
+        states_nudged = self.forward_pass(x, target=target, beta=self.beta)
         
         # Compute weight gradients with momentum and clipping
         for i in range(len(self.weights)):
@@ -219,8 +236,8 @@ class EquilibriumPropagationNetwork:
         return np.argmax(states_free[-1])
     
     def predict_sample(self, x):
-        """Predict a single sample with stable relaxation"""
-        states = self.forward_pass(x, target=None, beta=0, n_iterations=50)
+        """Predict a single sample via free-phase equilibrium"""
+        states = self.forward_pass(x, target=None, beta=0)
         return np.argmax(states[-1])
     
     def train(self, X_train, y_train, X_val=None, y_val=None, epochs=100, patience=15):
@@ -235,9 +252,6 @@ class EquilibriumPropagationNetwork:
         for epoch in range(epochs):
             # Cosine annealing learning rate schedule
             self.learning_rate = initial_lr * 0.5 * (1 + np.cos(np.pi * epoch / epochs))
-            
-            # Adaptive equilibrium iterations (increase over time for better convergence)
-            n_iter = min(50 + epoch // 10, 80)
             
             # Shuffle data
             indices = np.random.permutation(n_samples)
