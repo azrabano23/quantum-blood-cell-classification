@@ -1,148 +1,107 @@
 # Quantum Blood Cell Classification
-**Comparing Classical and Quantum Machine Learning for Acute Myeloid Leukemia Detection**
 
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Comparing classical and quantum machine learning methods for Acute Myeloid Leukemia (AML) detection from blood cell microscopy images.
+
+**Paper**: [arXiv:2601.18710](https://arxiv.org/abs/2601.18710)
+
+---
+
+## Methods (Ranked by Performance)
+
+1. **CNN** - Convolutional Neural Network (best)
+2. **EP** - Equilibrium Propagation (quantum-inspired)
+3. **VQC** - Variational Quantum Classifier
+4. **Dense NN** - Dense Neural Network
 
 ---
 
-## Project Overview
+## Requirements
 
-This project compares classical, quantum-inspired, and quantum approaches for automated detection of Acute Myeloid Leukemia (AML) from blood cell microscopy images.
+**Python 3.10+**
 
-### Methods Implemented (Ranked by Performance)
-
-1. **Classical CNN** - Best Performance
-   - Architecture: Conv(32) → Conv(64) → Conv(128) → FC(256) → FC(128) → 2 classes
-   - Data augmentation: flips, rotation, brightness, zoom
-   - Regularization: dropout, weight decay, gradient clipping
-   
-2. **Classical Dense NN**
-   - Architecture: 20 features → 128 → 64 → 32 → 2 classes
-   - Feature extraction: intensity, GLCM texture, morphology, edge, frequency
-
-3. **Equilibrium Propagation** (Quantum-Inspired)
-   - Architecture: 20 features → 256 → 128 → 64 → 2 classes
-   - Energy-based learning (no backpropagation)
-   - Features: statistical + GLCM + morphology + edge + frequency
-
-4. **Quantum Kernel Classifier** (Quantum)
-   - 4-qubit quantum circuit with ZZFeatureMap
-   - Quantum kernel with SVM classifier
-   - Qiskit implementation
-
----
-## 🚀 Quick Start
+### Exact Tested Versions
+```
+torch==2.7.1
+qiskit==2.3.0
+qiskit-machine-learning==0.9.0
+qiskit-algorithms==0.4.0
+scikit-learn==1.7.1
+scikit-image==0.25.2
+numpy==2.4.2
+scipy==1.15.3
+matplotlib==3.10.3
+```
 
 ### Installation
-
 ```bash
-# Clone repository
-git clone https://github.com/azrabano23/quantum-blood-cell-classification.git
-cd quantum-blood-cell-classification
-
-# Install dependencies
-pip install -r requirements.txt
+pip install torch==2.7.1
+pip install qiskit==2.3.0 qiskit-machine-learning==0.9.0 qiskit-algorithms==0.4.0
+pip install scikit-learn==1.7.1 scikit-image==0.25.2
+pip install numpy scipy matplotlib
 ```
 
-### Dependencies
-```
-torch>=1.9.0
-qiskit>=0.36.0
-qiskit-machine-learning>=0.4.0
-scikit-learn>=1.0.0
-scikit-image>=0.19.0
-numpy>=1.21.0
-scipy>=1.7.0
-matplotlib>=3.4.0
-```
+---
 
-### Dataset Setup
+## Dataset
 
-1. Download the **AML-Cytomorphology_LMU** dataset from [TCIA](https://www.cancerimagingarchive.net/collection/aml-cytomorphology_lmu/)
-2. Extract to: `/path/to/PKG - AML-Cytomorphology_LMU`
-3. Update dataset path in scripts (line ~460-465 in each file)
+**AML-Cytomorphology_LMU** from The Cancer Imaging Archive (TCIA)
 
-### Running Experiments
+1. Download: https://www.cancerimagingarchive.net/collection/aml-cytomorphology_lmu/
+2. Extract to any location
+3. Update `DATASET_PATH` in the script you want to run
 
+---
+
+## Running Experiments
+
+### Quick Start (All Models)
 ```bash
-# Run CNN
-python classical_cnn.py
+python run_verified_experiments.py
+```
 
-# Run Dense NN
-python classical_dense_nn.py
+This runs all 4 models with 250 samples per class and outputs a comparison.
 
-# Run Equilibrium Propagation
-python equilibrium_propagation.py
+### Individual Models
+```bash
+python classical_cnn.py           # CNN
+python classical_dense_nn.py      # Dense NN  
+python equilibrium_propagation.py # Equilibrium Propagation
+python vqc_classifier.py          # Quantum Classifier
+```
 
-# Run Variational Quantum Classifier
-python vqc_classifier.py
-
-# Run all experiments and compare
-python run_all_experiments.py
+### IBM Quantum Hardware
+```bash
+python run_on_ibm_quantum.py --setup     # Save API credentials
+python run_on_ibm_quantum.py --samples 25  # Run on real hardware
 ```
 
 ---
 
-## 📁 Repository Structure
+## Files
 
-### Core Implementations
-```
-classical_cnn.py              # CNN with data augmentation
-classical_dense_nn.py         # Dense network with GLCM features
-equilibrium_propagation.py    # Quantum-inspired EP with 20 features
-vqc_classifier.py             # Variational quantum classifier
-```
-
-### Utilities
-```
-run_all_experiments.py       # Master script to run all methods
-run_quantum_experiments.py   # Run quantum methods only
-generate_email_diagram.py    # Visualize results
-requirements.txt             # Python dependencies
-```
-
-### Results
-```
-results_cnn.json             # CNN experiment results
-results_dense_nn.json        # Dense NN results
-results_ep.json              # Equilibrium propagation results
-results_vqc.json             # VQC results
-```
----
-
-## 🔗 References
-
-### Dataset
-Matek, C., Schwarz, S., Marr, C., & Spiekermann, K. (2019). *A Single-cell Morphological Dataset of Leukocytes from AML Patients and Non-malignant Controls* [Data set]. The Cancer Imaging Archive. [DOI: 10.7937/tcia.2019.36f5o9ld](https://doi.org/10.7937/tcia.2019.36f5o9ld)
-
-### Methods
-1. **Equilibrium Propagation**: Scellier, B., & Bengio, Y. (2017). Equilibrium propagation: Bridging the gap between energy-based models and backpropagation. *Frontiers in computational neuroscience*, 11, 24.
-
-2. **Variational Quantum Classifier**: Farhi, E., & Neven, H. (2018). Classification with quantum neural networks on near term processors. *arXiv preprint arXiv:1802.06002*.
-
-3. **Quantum Machine Learning**: Benedetti, M., Lloyd, E., Sack, S., & Fiorentini, M. (2019). Parameterized quantum circuits as machine learning models. *Quantum Science and Technology*, 4(4), 043001.
-
-4. **CNNs for Medical Imaging**: LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. *Nature*, 521(7553), 436-444.
-
-5. **Data Augmentation**: Shorten, C., & Khoshgoftaar, T. M. (2019). A survey on image data augmentation for deep learning. *Journal of Big Data*, 6(1), 1-48.
-
-### Quantum Computing Resources
-- **Qiskit Documentation**: [qiskit.org/documentation](https://qiskit.org/documentation/)
-- **IBM Quantum**: [quantum-computing.ibm.com](https://quantum-computing.ibm.com/)
-- **Qiskit Machine Learning**: [qiskit.org/ecosystem/machine-learning](https://qiskit.org/ecosystem/machine-learning/)
+| File | Description |
+|------|-------------|
+| `run_verified_experiments.py` | Runs all 4 models and compares results |
+| `classical_cnn.py` | CNN with data augmentation |
+| `classical_dense_nn.py` | Dense NN with 20 engineered features |
+| `equilibrium_propagation.py` | EP network (no backpropagation) |
+| `vqc_classifier.py` | 4-qubit quantum kernel classifier |
+| `run_on_ibm_quantum.py` | Run VQC on IBM Quantum hardware |
 
 ---
 
-## 📜 License
+## References
 
-MIT License - See LICENSE file for details
+**Dataset**: Matek et al. (2019). A Single-cell Morphological Dataset of Leukocytes from AML Patients and Non-malignant Controls. TCIA. [DOI: 10.7937/tcia.2019.36f5o9ld](https://doi.org/10.7937/tcia.2019.36f5o9ld)
 
-Dataset: CC BY 3.0 License ([TCIA](https://www.cancerimagingarchive.net/))
+**Equilibrium Propagation**: Scellier & Bengio (2017). Equilibrium propagation: Bridging the gap between energy-based models and backpropagation. *Frontiers in Computational Neuroscience*.
+
+**VQC**: Farhi & Neven (2018). Classification with quantum neural networks on near term processors. *arXiv:1802.06002*.
+
 ---
 
-## Acknowledgments
+## License
 
-- Munich University Hospital for the AML-Cytomorphology dataset
-- Qiskit and IBM Quantum teams for quantum computing tools
-- PyTorch and scikit-learn communities for ML frameworks
+MIT License
+
+Dataset: CC BY 3.0 ([TCIA](https://www.cancerimagingarchive.net/))
