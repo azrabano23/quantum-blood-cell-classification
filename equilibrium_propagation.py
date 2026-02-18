@@ -3,18 +3,17 @@
 Equilibrium Propagation for Blood Cell Classification
 =====================================================
 
-Implements Equilibrium Propagation (EP), a biologically-inspired learning
-algorithm that doesn't use backpropagation. Instead, it uses local energy
-minimization.
-
-Key concepts:
+Implements Equilibrium Propagation (EP) EXACTLY as described in the paper:
 - Two phases: free phase (no target) and nudged phase (with target)
-- Energy-based model
-- Local learning rules (more biologically plausible)
+- Energy-based model with tanh activations
+- Local learning rules (NO backpropagation)
+- Architecture: 256-128-64 hidden layers, 2-unit output
+- Training: momentum SGD (μ=0.9), cosine annealing LR, early stopping (patience=15)
+- Nudging strength: beta=0.1
 
-Reference:
-Scellier, B., & Bengio, Y. (2017). Equilibrium propagation: Bridging the gap
-between energy-based models and backpropagation. Frontiers in computational neuroscience.
+Paper: arXiv:2601.18710
+Reference: Scellier & Bengio (2017). Equilibrium propagation: Bridging the gap
+between energy-based models and backpropagation. Frontiers in Computational Neuroscience.
 
 Author: A. Zrabano
 """
@@ -30,40 +29,44 @@ from skimage.measure import regionprops, label
 from skimage.filters import sobel
 from scipy import ndimage
 import os
+import sys
 import time
 import json
 
 np.random.seed(42)
 
-def sigmoid(x):
-    """Sigmoid activation"""
-    return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
 
-def sigmoid_derivative(x):
-    """Derivative of sigmoid"""
-    s = sigmoid(x)
-    return s * (1 - s)
+def tanh(x):
+    """Tanh activation as specified in paper"""
+    return np.tanh(np.clip(x, -10, 10))
+
+
+def tanh_derivative(x):
+    """Derivative of tanh"""
+    return 1 - np.tanh(x) ** 2
 
 class EquilibriumPropagationNetwork:
     """
-    Optimized Equilibrium Propagation Network
+    Equilibrium Propagation Network - EXACTLY as described in paper.
     
-    Enhanced with:
-    - Better weight initialization (Xavier/He)
-    - Adaptive learning rate
-    - Batch normalization-like stability
-    - Longer relaxation for better equilibrium
+    Paper specifications:
+    - Architecture: 256-128-64 hidden layers, tanh activations, 2-unit output
+    - Free phase: network settles to equilibrium s* with no supervision
+    - Nudged phase: output nudged toward target with beta=0.1
+    - Weight update: ΔW_ij ∝ (s_i^β s_j^β - s_i* s_j*)/β
+    - Training: momentum SGD (μ=0.9), cosine annealing LR, early stopping (patience=15)
+    - NO BACKPROPAGATION - uses local Hebbian-like learning rules
     """
     
-    def __init__(self, layer_sizes=[20, 256, 128, 64, 2], beta=0.3, learning_rate=0.05, 
+    def __init__(self, layer_sizes=[20, 256, 128, 64, 2], beta=0.1, learning_rate=0.05, 
                  use_momentum=True, momentum=0.9, l2_reg=0.0001):
         """
         Args:
             layer_sizes: List of layer sizes [input, hidden1, hidden2, ..., output]
-            beta: Nudging parameter for the output layer (lower for stability)
-            learning_rate: Learning rate for weight updates (higher for faster learning)
-            use_momentum: Whether to use momentum
-            momentum: Momentum factor
+            beta: Nudging parameter (paper: 0.1)
+            learning_rate: Learning rate for weight updates
+            use_momentum: Whether to use momentum (paper: True)
+            momentum: Momentum factor (paper: 0.9)
             l2_reg: L2 regularization strength
         """
         self.layer_sizes = layer_sizes
@@ -147,15 +150,13 @@ class EquilibriumPropagationNetwork:
                 if i == self.n_layers - 1 and target is not None:
                     h += beta * (target - states[i])
                 
-                # Update state with smaller step for stability
-                new_state = sigmoid(h)
+                # Update state using tanh activation as per paper
+                new_state = tanh(h)
                 
-                # State normalization for stability (like batch norm)
-                if i < self.n_layers - 1:  # Don't normalize output layer
-                    new_state = (new_state - np.mean(new_state)) / (np.std(new_state) + 1e-8)
-                    new_state = (new_state + 1) / 2  # Rescale to [0, 1] range
-                    new_state = np.clip(new_state, 0.01, 0.99)  # Prevent saturation
+                # Clip to valid range for stability
+                new_state = np.clip(new_state, -0.99, 0.99)
                 
+                # Smooth update for equilibrium convergence
                 states[i] = (1 - alpha) * states[i] + alpha * new_state
         
         return states
@@ -443,20 +444,22 @@ class EquilibriumPropagationClassifier:
             X_val = None
             y_val = None
         
-        print(f"\nTraining Enhanced Equilibrium Propagation Network")
-        print(f"Architecture: {' -> '.join(map(str, self.layer_sizes))}")
-        print(f"Training samples: {len(X_train_split)}, Validation samples: {len(X_val) if X_val is not None else 0}")
-        print(f"Features: 20 (6 stat + 6 GLCM + 4 morph + 2 edge + 2 freq)")
-        print(f"Using: momentum, L2 reg, cosine annealing, state normalization, early stopping")
+        print(f"\nTraining Equilibrium Propagation Network (Paper-exact implementation)")
+        print(f"  Architecture: {' -> '.join(map(str, self.layer_sizes))}")
+        print(f"  Activation: tanh")
+        print(f"  Training samples: {len(X_train_split)}, Validation: {len(X_val) if X_val is not None else 0}")
+        print(f"  Beta (nudging strength): 0.1")
+        print(f"  Momentum: 0.9, Cosine annealing LR, Early stopping (patience=15)")
+        print(f"  NO BACKPROPAGATION - uses local Hebbian-like learning")
         
         start_time = time.time()
         
         self.model = EquilibriumPropagationNetwork(
             layer_sizes=self.layer_sizes,
-            beta=0.3,  # Lower for stability
-            learning_rate=0.08,  # Higher initial LR (will decay with cosine annealing)
+            beta=0.1,  # Paper: beta=0.1
+            learning_rate=0.08,
             use_momentum=True,
-            momentum=0.9,
+            momentum=0.9,  # Paper: momentum=0.9
             l2_reg=0.0001
         )
         
@@ -554,9 +557,19 @@ def run_experiment(dataset_folder, sample_sizes=[50, 100, 200, 250]):
     return results
 
 if __name__ == "__main__":
-    dataset_path = "/Users/azrabano/Downloads/PKG - AML-Cytomorphology_LMU"
+    # Accept dataset path from command line or use default
+    if len(sys.argv) > 1:
+        dataset_path = sys.argv[1]
+    else:
+        dataset_path = os.environ.get(
+            'AML_DATASET_PATH',
+            '/Users/azrabano/Downloads/PKG - AML-Cytomorphology_LMU'
+        )
     
     if not os.path.exists(dataset_path):
         print(f"Dataset not found at: {dataset_path}")
+        print("Usage: python equilibrium_propagation.py <dataset_path>")
+        print("Or set AML_DATASET_PATH environment variable")
+        sys.exit(1)
     else:
         results = run_experiment(dataset_path, sample_sizes=[50, 100, 200, 250])
