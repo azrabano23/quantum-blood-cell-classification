@@ -16,10 +16,11 @@ torch>=1.9.0
 torchvision>=0.10.0
 tensorflow>=2.6.0
 
-# Quantum computing (IMPORTANT: specific versions for compatibility)
-qiskit>=0.45.0,<1.0.0
-qiskit-machine-learning>=0.6.0,<0.8.0
-qiskit-algorithms>=0.2.0,<0.3.0
+# Quantum computing (Qiskit 2.x for IBM Quantum Platform)
+qiskit>=2.0
+qiskit-machine-learning>=0.8
+qiskit-algorithms>=0.4
+qiskit-ibm-runtime>=0.30
 
 # Jupyter notebooks
 jupyter>=1.0.0
