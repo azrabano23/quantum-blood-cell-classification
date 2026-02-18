@@ -294,8 +294,9 @@ class VQCClassifier:
         
         start_time = time.time()
         
-        # RealAmplitudes with 2 layers on 4 qubits = 8 parameters
-        n_params = self.n_qubits * 2  # 2 layers
+        # RealAmplitudes with 2 reps on 4 qubits = 12 parameters
+        # Formula: n_qubits * (reps + 1) = 4 * 3 = 12
+        n_params = self.n_qubits * 3  # 2 reps + initial layer
         initial_params = np.random.uniform(0, 2*np.pi, n_params)
         
         # Track best loss
