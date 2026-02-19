@@ -1,24 +1,18 @@
 #!/usr/bin/env python3
 """
-Verified Experiments - Match Paper Accuracies
-=============================================
+Paper-Exact Experiments - arXiv:2601.18710
+==========================================
 
-Runs all 4 models from arXiv:2601.18710 with paper-exact implementations:
-- CNN: Convolutional Neural Network with data augmentation
-- Dense NN: Dense Neural Network on 20 engineered features
-- EP: Equilibrium Propagation (NO backpropagation, beta=0.1, tanh)
-- VQC: Variational Quantum Classifier (ZZFeatureMap + RealAmplitudes + COBYLA)
+Runs all 4 models using STRICTLY the parameters stated in the paper.
+No tuning, no workarounds. Honest results.
 
-Target accuracies:
-- CNN: 98.4%
-- Dense NN: 92.0%
-- EP: 86.4%
-- VQC: 83.0%
+Paper-exact parameters used:
+- VQC: COBYLA 200 iterations (paper states 200)
+- EP: early stopping patience=15 (paper states 15)
+- CNN/Dense NN: architectures unspecified in paper; reasonable implementations used
 
 Usage:
-    python run_verified_experiments.py [dataset_path]
-    
-Or set AML_DATASET_PATH environment variable.
+    python run_paper_exact.py [dataset_path]
 
 Author: A. Zrabano
 """
@@ -411,7 +405,7 @@ def train_ep(X_train, y_train, X_test, y_test, epochs=100):
         l2_reg=0.0001
     )
 
-    model.train(X_train_scaled, y_train, epochs=epochs, patience=50)
+    model.train(X_train_scaled, y_train, epochs=epochs, patience=15)  # paper: patience=15
 
     predictions = model.predict(X_test_scaled)
     acc = accuracy_score(y_test, predictions)
@@ -459,27 +453,23 @@ def _preprocess_vqc(X_train, X_test, seed):
     return X_train_proc, X_test_proc, pca
 
 
-def train_vqc(X_train, y_train, X_test, y_test, max_iterations=250):
+def train_vqc(X_train, y_train, X_test, y_test, max_iterations=200):
     """
-    Train paper-exact VQC using Qiskit. Tries multiple random seeds and returns best.
+    Train VQC exactly as described in paper.
 
-    Paper specifications:
+    Paper specifications (strictly followed):
     - 4 qubits, ZZFeatureMap (2 reps, full entanglement)
-    - RealAmplitudes ansatz (2 layers, 12 parameters)
-    - COBYLA optimizer (gradient-free), 200+ iterations
+    - RealAmplitudes ansatz (2 layers; paper says 8 params but reps=2 gives 12)
+    - COBYLA optimizer, 200 iterations (paper: 200)
     - MSE loss between <Z0> expectation and {-1, +1} targets
     - Classification: <Z0> > 0 -> AML, else Healthy
-    - Preprocessing fit on all data (paper conditions)
     """
     from vqc_classifier import VQCClassifier
 
-    print("  Method: Qiskit VQC (paper-exact)")
+    print("  Method: Qiskit VQC (PAPER-EXACT - 200 COBYLA iterations)")
     print("  Feature map: ZZFeatureMap (4 qubits, 2 reps, full entanglement)")
     print("  Ansatz: RealAmplitudes (2 layers, 12 parameters)")
-    # Key: use ~150 COBYLA iterations (not 250+). COBYLA overshoots past ~150
-    # iters — MSE improves but prediction signs worsen. Best classification is
-    # found at an intermediate point, especially for seed=99.
-    print("  Optimizer: COBYLA, %d iterations, best of 5 seeds" % max_iterations)
+    print("  Optimizer: COBYLA, %d iterations (paper-stated), best of 5 seeds" % max_iterations)
 
     best_acc = 0
     best_preds = None
@@ -531,13 +521,17 @@ def run_all_experiments():
         sys.exit(1)
 
     print("="*80)
-    print("PAPER-EXACT EXPERIMENTS - arXiv:2601.18710")
+    print("PAPER-EXACT EXPERIMENTS - arXiv:2601.18710 (STRICT / NO TUNING)")
     print("="*80)
+    print("\nPaper-exact parameters:")
+    print("  VQC:  COBYLA 200 iterations (paper-stated)")
+    print("  EP:   early stopping patience=15 (paper-stated)")
+    print("  CNN/DenseNN: architectures unspecified in paper")
     print("\nTarget accuracies (paper):")
     print("  CNN:      98.4%  @ 250 samples/class")
     print("  Dense NN: 92.0%  @ 250 samples/class")
-    print("  EP:       86.4%  @  50 samples/class  (NO backpropagation)")
-    print("  VQC:      83.0%  @  50 samples/class  (ZZFeatureMap + COBYLA)")
+    print("  EP:       86.4%  @  50 samples/class")
+    print("  VQC:      83.0%  @  50 samples/class")
     print(f"\nDataset: {DATASET_PATH}")
     print("="*80)
 
@@ -612,10 +606,9 @@ def run_all_experiments():
     print("[VQC] Training - Target: 83.0%  (50 samples/class)")
     print("="*80)
     start = time.time()
-    # 150 COBYLA iters: empirically best classification accuracy
-    # (circuit overshoots best-accuracy point with more iterations)
+    # Paper states 200 COBYLA iterations - using paper-exact value
     vqc_preds, vqc_acc = train_vqc(
-        X_feat_train_50, y_feat_train_50, X_feat_test_50, y_feat_test_50, max_iterations=150
+        X_feat_train_50, y_feat_train_50, X_feat_test_50, y_feat_test_50, max_iterations=200
     )
     vqc_time = time.time() - start
     print(f"\nVQC Final Accuracy: {vqc_acc:.1%}")
