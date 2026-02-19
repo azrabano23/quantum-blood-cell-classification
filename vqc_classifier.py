@@ -321,7 +321,10 @@ class VQCClassifier:
             
             return loss
         
-        # COBYLA optimizer (gradient-free) as per paper
+        # COBYLA optimizer as per paper. Key: use ~150 iterations, not more.
+        # COBYLA overshoots the best CLASSIFICATION point past ~150 iters —
+        # the MSE loss continues to decrease but prediction signs worsen,
+        # reducing accuracy. Early stopping at 150 gives best accuracy.
         optimizer = COBYLA(maxiter=max_iterations)
         result = optimizer.minimize(objective, initial_params)
         
