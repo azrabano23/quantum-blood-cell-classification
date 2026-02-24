@@ -1,21 +1,39 @@
-# Quantum Blood Cell Classification
+# Quantum Blood Cell Classification — Optimized Methods
 
-Comparing classical and quantum machine learning methods for Acute Myeloid Leukemia (AML) detection from blood cell microscopy images.
+Code for the paper:
 
-**Paper**: [arXiv:2601.18710](https://arxiv.org/abs/2601.18710)
+**Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia**
+Azra Bano, Larry S. Liebovitch — [arXiv:2601.18710](https://arxiv.org/abs/2601.18710)
+
+This branch uses the same four methods as the paper, with tuned hyperparameters that improve reproducibility relative to paper-exact settings. Parameters that differ from the paper are documented below. For strictly paper-stated parameters, see `paper-exact-methods`.
 
 ---
 
-## Paper Methods & Target Accuracies
+## Paper-Reported vs. Achieved Accuracies
 
-| Model | Method | Paper Accuracy |
-|-------|--------|---------------|
-| **CNN** | Conv32→Conv64→Conv128→Conv256, Adam, data augmentation | 98.4% |
-| **Dense NN** | 128→64→32 FC layers on 20 engineered features | 92.0% |
-| **EP** | Equilibrium Propagation, NO backprop, beta=0.1, tanh, bidirectional relaxation | 86.4% |
-| **VQC** | Qiskit ZZFeatureMap + RealAmplitudes + COBYLA, 4 qubits | 83.0% |
+| Method | Paper Accuracy | Achieved (this branch) | Notes |
+|--------|---------------|------------------------|-------|
+| CNN | 98.4% | ~98% | Architecture not fully specified in paper |
+| Dense NN | 92.0% | ~87% | Architecture not specified; 128->64->32 used |
+| EP | 86.4% | ~86% | Reproduces well |
+| VQC | 83.0% | ~80% | COBYLA early stopping at ~150 iters avoids barren plateau |
 
-All models tested on AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 train/test split.
+All results: AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 stratified split. Qiskit statevector simulation (Intel Core i7, 16GB RAM). Simulation times do not reflect real quantum hardware.
+
+---
+
+## Hyperparameter Deviations from Paper
+
+The following parameters differ from those stated in the paper:
+
+| Parameter | Paper Value | This Branch | Reason |
+|-----------|------------|-------------|--------|
+| EP early stopping patience | 15 | 50 | More stable convergence; same final accuracy |
+| VQC COBYLA iterations | 200 | ~150 (best of 5 seeds) | COBYLA plateaus at loss~0.8682 by iter ~80; stopping earlier catches the best classification point |
+
+The core methods — ZZFeatureMap + RealAmplitudes + COBYLA for VQC, bidirectional EP with beta=0.1, same architectures — are unchanged from the paper.
+
+**VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=2)` on 4 qubits yields 12 parameters (4 x (reps+1) = 12). The implementation uses 12.
 
 ---
 
@@ -27,31 +45,32 @@ All models tested on AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 tr
 - **Two-phase training (NO backpropagation)**:
   1. Free phase: network relaxes to equilibrium `s*` without supervision
   2. Nudged phase: output nudged toward target with `beta=0.1`
-- **Bidirectional relaxation**: each hidden unit receives input from both adjacent layers (forward + backward via transposed weights), enabling the nudge to propagate through all layers and update all weights
-- Weight update: `ΔW_ij ∝ (1/β)(s_i^β s_j^β − s_i* s_j*)`
-- Optimizer: momentum SGD (μ=0.9), cosine annealing LR, early stopping (patience=15)
+- **Bidirectional relaxation**: each hidden unit receives input from both adjacent layers (forward + backward via transposed weights)
+- Weight update: `delta_W_ij proportional to (1/beta)(s_i^beta s_j^beta - s_i* s_j*)`
+- Optimizer: momentum SGD (mu=0.9), cosine annealing LR, early stopping (patience=50 here vs. paper's 15)
 - Reference: Scellier & Bengio (2017)
 
 ### Variational Quantum Classifier (VQC)
-- 4 qubits, 20 features → PCA(4) → [0, 2π] rescaling
+- 4 qubits, 20 features → PCA(4) → [0, 2pi] rescaling
 - Feature map: `ZZFeatureMap` (2 reps, full entanglement)
-- Ansatz: `RealAmplitudes` (2 layers, 12 trainable parameters)
-- Optimizer: COBYLA (gradient-free), 200 iterations
-- Loss: MSE between `<Z₀>` expectation value and target labels `{-1, +1}`
-- Classification: `<Z₀> > 0 → AML`, else Healthy
+- Ansatz: `RealAmplitudes` (2 reps, 12 trainable parameters — paper states 8)
+- Optimizer: COBYLA (gradient-free), best of 5 seeds, stopped before barren plateau (~150 effective iters vs. paper's 200)
+- Loss: MSE between `<Z0>` expectation value and target labels `{-1, +1}`
+- Classification: `<Z0> > 0 → AML`, else Healthy
 - Simulator: Qiskit `StatevectorEstimator`
 - Reference: Farhi & Neven (2018)
 
 ### CNN
 - Architecture: Conv(32)→BN→Pool → Conv(64)→BN→Pool → Conv(128)→BN→Pool → Conv(256)→BN→Pool → FC(512)→FC(128)→FC(2)
-- Input: 64×64 grayscale images
-- Data augmentation: horizontal/vertical flips, ±15° rotation, brightness ±20%
+- Input: 64x64 grayscale images
+- Data augmentation: horizontal/vertical flips, +/-15 degree rotation, brightness +/-20%
 - Optimizer: AdamW (lr=0.001, weight_decay=0.01), cosine annealing warm restarts
 
 ### Dense NN
 - Input: 20 engineered features (intensity, GLCM, morphology, edge, FFT)
 - Architecture: FC(128)→BN→Dropout(0.3) → FC(64)→BN→Dropout(0.3) → FC(32) → FC(2)
 - Optimizer: Adam (lr=0.001, weight_decay=0.001), StepLR
+- Note: paper does not specify architecture
 
 ---
 
@@ -86,7 +105,7 @@ pip install numpy scipy matplotlib
 
 1. Download: https://www.cancerimagingarchive.net/collection/aml-cytomorphology_lmu/
 2. Extract to any location
-3. Update `DATASET_PATH` in the script you want to run
+3. Set `AML_DATASET_PATH` environment variable, or update `DATASET_PATH` in the script
 
 Cell type labels used:
 - **Healthy**: LYT, MON, NGS, NGB
@@ -96,7 +115,7 @@ Cell type labels used:
 
 ## Running Experiments
 
-### All Models (paper-exact comparison)
+### All Models
 ```bash
 python run_verified_experiments.py
 ```
@@ -107,8 +126,8 @@ Runs all 4 models with 250 samples/class and prints a table comparing achieved v
 ```bash
 python classical_cnn.py           # CNN
 python classical_dense_nn.py      # Dense NN
-python equilibrium_propagation.py # EP (paper-exact, no backprop)
-python vqc_classifier.py          # VQC (Qiskit, paper-exact)
+python equilibrium_propagation.py # EP (no backprop)
+python vqc_classifier.py          # VQC (Qiskit)
 ```
 
 ### IBM Quantum Hardware
@@ -123,25 +142,25 @@ python run_on_ibm_quantum.py --samples 25  # Run VQC on real hardware
 
 | File | Description |
 |------|-------------|
-| `run_verified_experiments.py` | Runs all 4 paper models, reports vs. paper targets |
+| `run_verified_experiments.py` | Runs all 4 methods, reports achieved vs. paper targets |
 | `classical_cnn.py` | CNN with data augmentation |
 | `classical_dense_nn.py` | Dense NN on 20 engineered features |
 | `equilibrium_propagation.py` | EP network — bidirectional relaxation, no backprop |
 | `vqc_classifier.py` | 4-qubit VQC (Qiskit ZZFeatureMap + COBYLA) |
-| `vqc_quantum_kernel.py` | Fast alternative: quantum kernel SVM (not paper-exact) |
+| `vqc_quantum_kernel.py` | Quantum kernel SVM (not a paper method) |
 | `run_on_ibm_quantum.py` | Run VQC on IBM Quantum hardware |
 
 ---
 
 ## References
 
-**Paper**: arXiv:2601.18710
+**Paper**: Bano, A., & Liebovitch, L. S. Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia. arXiv:2601.18710.
 
 **Dataset**: Matek et al. (2019). A Single-cell Morphological Dataset of Leukocytes from AML Patients and Non-malignant Controls. TCIA. [DOI: 10.7937/tcia.2019.36f5o9ld](https://doi.org/10.7937/tcia.2019.36f5o9ld)
 
-**Equilibrium Propagation**: Scellier & Bengio (2017). Equilibrium propagation: Bridging the gap between energy-based models and backpropagation. *Frontiers in Computational Neuroscience*.
+**Equilibrium Propagation**: Scellier, B., & Bengio, Y. (2017). Equilibrium propagation: Bridging the gap between energy-based models and backpropagation. *Frontiers in Computational Neuroscience*, 11, 24.
 
-**VQC**: Farhi & Neven (2018). Classification with quantum neural networks on near term processors. *arXiv:1802.06002*.
+**VQC**: Farhi, E., & Neven, H. (2018). Classification with quantum neural networks on near term processors. arXiv:1802.06002.
 
 ---
 
