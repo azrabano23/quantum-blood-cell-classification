@@ -1,12 +1,15 @@
-# Quantum Blood Cell Classification
+# Quantum Blood Cell Classification — Paper-Exact Methods
 
-Comparing classical and quantum machine learning methods for Acute Myeloid Leukemia (AML) detection from blood cell microscopy images.
+Code for the paper:
 
-**Paper**: [arXiv:2601.18710](https://arxiv.org/abs/2601.18710)
+**Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia**
+Azra Bano, Larry S. Liebovitch — [arXiv:2601.18710](https://arxiv.org/abs/2601.18710)
+
+This branch implements all four methods using parameters stated in the paper. Parameters are not tuned. Where results differ from the paper, discrepancies are documented below. For tuned implementations, see `optimized-methods`.
 
 ---
 
-## Paper Methods & Target Accuracies
+## Paper-Reported Accuracies
 
 | Model | Method | Paper Accuracy |
 |-------|--------|---------------|
@@ -15,7 +18,24 @@ Comparing classical and quantum machine learning methods for Acute Myeloid Leuke
 | **EP** | Equilibrium Propagation, NO backprop, beta=0.1, tanh, bidirectional relaxation | 86.4% |
 | **VQC** | Qiskit ZZFeatureMap + RealAmplitudes + COBYLA, 4 qubits | 83.0% |
 
-All models tested on AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 train/test split.
+All results from Qiskit statevector simulation (Intel Core i7, 16GB RAM), 250 samples/class, 80/20 stratified split, 3 random seeds (std < 2%). Simulation times do not reflect real quantum hardware.
+
+---
+
+## Known Discrepancies from Paper
+
+Running these implementations with strictly paper-stated parameters does not fully reproduce all reported results:
+
+| Method | Paper Accuracy | Achieved (paper-exact params) | Notes |
+|--------|---------------|-------------------------------|-------|
+| CNN | 98.4% | ~98% | Architecture not fully specified in paper |
+| Dense NN | 92.0% | ~87% | Architecture not specified; 128->64->32 used |
+| EP | 86.4% | ~86% | Reproduces well |
+| VQC | 83.0% | ~75% | COBYLA plateaus at loss~0.8682 by iter ~80; remaining 120 iters do not improve classification |
+
+**VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=2)` on 4 qubits yields 12 parameters (4 x (reps+1) = 12). The paper may have used reps=1, which gives 8. This implementation uses reps=2 (12 parameters) as written in the paper's circuit description.
+
+See `run_paper_exact.py` for detailed per-run output and discrepancy tracking.
 
 ---
 
@@ -35,8 +55,8 @@ All models tested on AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 tr
 ### Variational Quantum Classifier (VQC)
 - 4 qubits, 20 features → PCA(4) → [0, 2π] rescaling
 - Feature map: `ZZFeatureMap` (2 reps, full entanglement)
-- Ansatz: `RealAmplitudes` (2 layers, 12 trainable parameters)
-- Optimizer: COBYLA (gradient-free), 200 iterations
+- Ansatz: `RealAmplitudes` (2 reps, 12 trainable parameters — paper states 8; see Known Discrepancies)
+- Optimizer: COBYLA (gradient-free), 200 iterations (paper-exact)
 - Loss: MSE between `<Z₀>` expectation value and target labels `{-1, +1}`
 - Classification: `<Z₀> > 0 → AML`, else Healthy
 - Simulator: Qiskit `StatevectorEstimator`
@@ -52,6 +72,7 @@ All models tested on AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 tr
 - Input: 20 engineered features (intensity, GLCM, morphology, edge, FFT)
 - Architecture: FC(128)→BN→Dropout(0.3) → FC(64)→BN→Dropout(0.3) → FC(32) → FC(2)
 - Optimizer: Adam (lr=0.001, weight_decay=0.001), StepLR
+- Note: paper does not specify architecture; this is a reasonable implementation
 
 ---
 
@@ -135,7 +156,7 @@ python run_on_ibm_quantum.py --samples 25  # Run VQC on real hardware
 
 ## References
 
-**Paper**: arXiv:2601.18710
+**Paper**: Bano, A., & Liebovitch, L. S. Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia. arXiv:2601.18710.
 
 **Dataset**: Matek et al. (2019). A Single-cell Morphological Dataset of Leukocytes from AML Patients and Non-malignant Controls. TCIA. [DOI: 10.7937/tcia.2019.36f5o9ld](https://doi.org/10.7937/tcia.2019.36f5o9ld)
 
