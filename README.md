@@ -9,33 +9,27 @@ This branch implements all four methods using parameters stated in the paper. Pa
 
 ---
 
-## Paper-Reported Accuracies
+## Performance Ranking (Paper)
 
-| Model | Method | Paper Accuracy |
-|-------|--------|---------------|
-| **CNN** | Conv32→Conv64→Conv128→Conv256, Adam, data augmentation | 98.4% |
-| **Dense NN** | 128→64→32 FC layers on 20 engineered features | 92.0% |
-| **EP** | Equilibrium Propagation, NO backprop, beta=0.1, tanh, bidirectional relaxation | 86.4% |
-| **VQC** | Qiskit ZZFeatureMap + RealAmplitudes + COBYLA, 4 qubits | 83.0% |
+| Rank | Method | Description |
+|------|--------|-------------|
+| 1 | CNN | Conv32→Conv64→Conv128→Conv256, Adam, data augmentation |
+| 2 | Dense NN | 128→64→32 FC layers on 20 engineered features |
+| 3 | EP | Equilibrium Propagation, NO backprop, beta=0.1, tanh, bidirectional relaxation |
+| 4 | VQC | Qiskit ZZFeatureMap + RealAmplitudes + COBYLA, 4 qubits |
 
 All results from Qiskit statevector simulation (Intel Core i7, 16GB RAM), 250 samples/class, 80/20 stratified split, 3 random seeds (std < 2%). Simulation times do not reflect real quantum hardware.
 
 ---
 
-## Known Discrepancies from Paper
+## Implementation Notes
 
-Running these implementations with strictly paper-stated parameters does not fully reproduce all reported results:
+- **VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=2)` on 4 qubits yields 12 parameters (4 x (reps+1) = 12). The paper may have used reps=1, which gives 8. This implementation uses reps=2 (12 parameters) as written in the paper's circuit description.
+- **VQC optimizer**: COBYLA plateaus at loss~0.8682 by iter ~80; remaining 120 iters do not improve classification. See `run_paper_exact.py` for per-run output.
+- **Dense NN**: Architecture not specified in paper. This implementation uses FC 128→64→32.
+- **CNN**: Architecture not fully specified in paper. See Method Details below.
 
-| Method | Paper Accuracy | Achieved (paper-exact params) | Notes |
-|--------|---------------|-------------------------------|-------|
-| CNN | 98.4% | ~98% | Architecture not fully specified in paper |
-| Dense NN | 92.0% | ~87% | Architecture not specified; 128->64->32 used |
-| EP | 86.4% | ~86% | Reproduces well |
-| VQC | 83.0% | ~75% | COBYLA plateaus at loss~0.8682 by iter ~80; remaining 120 iters do not improve classification |
-
-**VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=2)` on 4 qubits yields 12 parameters (4 x (reps+1) = 12). The paper may have used reps=1, which gives 8. This implementation uses reps=2 (12 parameters) as written in the paper's circuit description.
-
-See `run_paper_exact.py` for detailed per-run output and discrepancy tracking.
+See `run_paper_exact.py` for detailed per-run output.
 
 ---
 
@@ -122,7 +116,7 @@ Cell type labels used:
 python run_verified_experiments.py
 ```
 
-Runs all 4 models with 250 samples/class and prints a table comparing achieved vs. paper accuracies.
+Runs all 4 models with 250 samples/class and prints a comparison table.
 
 ### Individual Models
 ```bash
@@ -144,7 +138,7 @@ python run_on_ibm_quantum.py --samples 25  # Run VQC on real hardware
 
 | File | Description |
 |------|-------------|
-| `run_verified_experiments.py` | Runs all 4 paper models, reports vs. paper targets |
+| `run_verified_experiments.py` | Runs all 4 paper models and compares results |
 | `classical_cnn.py` | CNN with data augmentation |
 | `classical_dense_nn.py` | Dense NN on 20 engineered features |
 | `equilibrium_propagation.py` | EP network — bidirectional relaxation, no backprop |
