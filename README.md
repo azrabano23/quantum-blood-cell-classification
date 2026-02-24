@@ -9,14 +9,14 @@ This branch uses the same four methods as the paper, with tuned hyperparameters 
 
 ---
 
-## Paper-Reported vs. Achieved Accuracies
+## Performance Ranking (Paper)
 
-| Method | Paper Accuracy | Achieved (this branch) | Notes |
-|--------|---------------|------------------------|-------|
-| CNN | 98.4% | ~98% | Architecture not fully specified in paper |
-| Dense NN | 92.0% | ~87% | Architecture not specified; 128->64->32 used |
-| EP | 86.4% | ~86% | Reproduces well |
-| VQC | 83.0% | ~80% | COBYLA early stopping at ~150 iters avoids barren plateau |
+| Rank | Method | Notes |
+|------|--------|-------|
+| 1 | CNN | Architecture not fully specified in paper |
+| 2 | Dense NN | Architecture not specified; 128->64->32 used |
+| 3 | EP | Reproduces well with tuned patience |
+| 4 | VQC | COBYLA early stopping at ~150 iters avoids plateau |
 
 All results: AML-Cytomorphology_LMU dataset, 250 samples/class, 80/20 stratified split. Qiskit statevector simulation (Intel Core i7, 16GB RAM). Simulation times do not reflect real quantum hardware.
 
@@ -120,7 +120,7 @@ Cell type labels used:
 python run_verified_experiments.py
 ```
 
-Runs all 4 models with 250 samples/class and prints a table comparing achieved vs. paper accuracies.
+Runs all 4 models with 250 samples/class and prints a comparison table.
 
 ### Individual Models
 ```bash
@@ -142,7 +142,7 @@ python run_on_ibm_quantum.py --samples 25  # Run VQC on real hardware
 
 | File | Description |
 |------|-------------|
-| `run_verified_experiments.py` | Runs all 4 methods, reports achieved vs. paper targets |
+| `run_verified_experiments.py` | Runs all 4 methods and compares results |
 | `classical_cnn.py` | CNN with data augmentation |
 | `classical_dense_nn.py` | Dense NN on 20 engineered features |
 | `equilibrium_propagation.py` | EP network — bidirectional relaxation, no backprop |
