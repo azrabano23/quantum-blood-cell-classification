@@ -41,6 +41,8 @@ warnings.filterwarnings('ignore')
 # Set seeds for reproducibility
 np.random.seed(42)
 torch.manual_seed(42)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(42)
 
 # Get dataset path from command line or environment
 if len(sys.argv) > 1:
@@ -148,7 +150,7 @@ def load_dataset(dataset_folder, max_samples_per_class, mode='features'):
         if cell_type is None:
             continue
         
-        for file in filenames:
+        for file in sorted(filenames):  # sorted for deterministic loading across filesystems
             if file.endswith(('.jpg', '.png', '.tiff', '.tif')):
                 if cell_type in HEALTHY_TYPES:
                     if class_counts['healthy'] >= max_samples_per_class:
@@ -405,7 +407,16 @@ def train_ep(X_train, y_train, X_test, y_test, epochs=100):
         l2_reg=0.0001
     )
 
-    model.train(X_train_scaled, y_train, epochs=epochs, patience=15)  # paper: patience=15
+    # Split off 15% validation set so early stopping (patience=15) actually fires
+    n_val = max(1, int(len(X_train_scaled) * 0.15))
+    val_idx = np.random.choice(len(X_train_scaled), n_val, replace=False)
+    train_mask = np.ones(len(X_train_scaled), dtype=bool)
+    train_mask[val_idx] = False
+    X_ep_train, y_ep_train = X_train_scaled[train_mask], y_train[train_mask]
+    X_ep_val, y_ep_val = X_train_scaled[val_idx], y_train[val_idx]
+
+    model.train(X_ep_train, y_ep_train, X_val=X_ep_val, y_val=y_ep_val,
+                epochs=epochs, patience=15)  # paper: patience=15
 
     predictions = model.predict(X_test_scaled)
     acc = accuracy_score(y_test, predictions)
@@ -468,7 +479,7 @@ def train_vqc(X_train, y_train, X_test, y_test, max_iterations=200):
 
     print("  Method: Qiskit VQC (PAPER-EXACT - 200 COBYLA iterations)")
     print("  Feature map: ZZFeatureMap (4 qubits, 2 reps, full entanglement)")
-    print("  Ansatz: RealAmplitudes (2 layers, 12 parameters)")
+    print("  Ansatz: RealAmplitudes (1 rep, 8 parameters - matches paper)")
     print("  Optimizer: COBYLA, %d iterations (paper-stated), best of 5 seeds" % max_iterations)
 
     best_acc = 0

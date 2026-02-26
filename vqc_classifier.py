@@ -149,7 +149,7 @@ class VQCClassifier:
             if cell_type is None:
                 continue
             
-            for file in filenames:
+            for file in sorted(filenames):  # sorted for deterministic loading across filesystems
                 if file.endswith(('.jpg', '.png', '.tiff', '.tif')):
                     if cell_type in healthy_cell_types:
                         if class_counts['healthy'] >= max_samples_per_class:
@@ -223,10 +223,11 @@ class VQCClassifier:
             entanglement='full'
         )
         
-        # Ansatz: RealAmplitudes with 2 layers (8 parameters for 4 qubits)
+        # Ansatz: RealAmplitudes with 1 rep (8 parameters for 4 qubits)
+        # Formula: n_qubits * (reps + 1) = 4 * 2 = 8 (paper-stated value)
         ansatz = RealAmplitudes(
             num_qubits=self.n_qubits,
-            reps=2,
+            reps=1,
             entanglement='full'
         )
         
@@ -294,9 +295,9 @@ class VQCClassifier:
         
         start_time = time.time()
         
-        # RealAmplitudes with 2 reps on 4 qubits = 12 parameters
-        # Formula: n_qubits * (reps + 1) = 4 * 3 = 12
-        n_params = self.n_qubits * 3  # 2 reps + initial layer
+        # RealAmplitudes with 1 rep on 4 qubits = 8 parameters
+        # Formula: n_qubits * (reps + 1) = 4 * 2 = 8 (matches paper)
+        n_params = self.n_qubits * 2  # 1 rep + initial layer
         initial_params = np.random.uniform(0, 2*np.pi, n_params)
         
         # Track best loss

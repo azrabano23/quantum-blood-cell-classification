@@ -163,7 +163,7 @@ class ClassicalDenseNNClassifier:
             if cell_type is None:
                 continue
             
-            for file in filenames:
+            for file in sorted(filenames):  # sorted for deterministic loading across filesystems
                 if file.endswith(('.jpg', '.png', '.tiff', '.tif')):
                     if cell_type in healthy_cell_types:
                         if class_counts['healthy'] >= max_samples_per_class:
