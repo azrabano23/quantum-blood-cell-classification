@@ -24,7 +24,7 @@ All results from Qiskit statevector simulation (Intel Core i7, 16GB RAM), 250 sa
 
 ## Implementation Notes
 
-- **VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=2)` on 4 qubits yields 12 parameters (4 x (reps+1) = 12). The paper may have used reps=1, which gives 8. This implementation uses reps=2 (12 parameters) as written in the paper's circuit description.
+- **VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=1)` on 4 qubits yields 8 parameters (4 × (reps+1) = 8). This matches the paper exactly.
 - **VQC optimizer**: COBYLA plateaus at loss~0.8682 by iter ~80; remaining 120 iters do not improve classification. See `run_paper_exact.py` for per-run output.
 - **Dense NN**: Architecture not specified in paper. This implementation uses FC 128→64→32.
 - **CNN**: Architecture not fully specified in paper. See Method Details below.
@@ -49,7 +49,7 @@ See `run_paper_exact.py` for detailed per-run output.
 ### Variational Quantum Classifier (VQC)
 - 4 qubits, 20 features → PCA(4) → [0, 2π] rescaling
 - Feature map: `ZZFeatureMap` (2 reps, full entanglement)
-- Ansatz: `RealAmplitudes` (2 reps, 12 trainable parameters — paper states 8; see Known Discrepancies)
+- Ansatz: `RealAmplitudes` (1 rep, 8 trainable parameters — matches paper)
 - Optimizer: COBYLA (gradient-free), 200 iterations (paper-exact)
 - Loss: MSE between `<Z₀>` expectation value and target labels `{-1, +1}`
 - Classification: `<Z₀> > 0 → AML`, else Healthy
