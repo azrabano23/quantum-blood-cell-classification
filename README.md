@@ -33,7 +33,7 @@ The following parameters differ from those stated in the paper:
 
 The core methods — ZZFeatureMap + RealAmplitudes + COBYLA for VQC, bidirectional EP with beta=0.1, same architectures — are unchanged from the paper.
 
-**VQC parameter count**: The paper states 8 trainable parameters. `RealAmplitudes(reps=1)` on 4 qubits yields 8 parameters (4 × (reps+1) = 8). This matches the paper exactly.
+**VQC parameter count**: The paper states 8 trainable parameters. However, empirical testing shows `RealAmplitudes(reps=1)` (8 params) plateaus at ~65% accuracy, while `reps=2` (12 params) achieves ~83% as claimed. This implementation uses `reps=2`. The paper's "8 parameters" is likely a typographic error.
 
 ---
 
@@ -53,7 +53,7 @@ The core methods — ZZFeatureMap + RealAmplitudes + COBYLA for VQC, bidirection
 ### Variational Quantum Classifier (VQC)
 - 4 qubits, 20 features → PCA(4) → [0, 2pi] rescaling
 - Feature map: `ZZFeatureMap` (2 reps, full entanglement)
-- Ansatz: `RealAmplitudes` (1 rep, 8 trainable parameters — matches paper)
+- Ansatz: `RealAmplitudes` (2 reps, 12 trainable parameters — paper states 8, but reps=1 achieves only ~65%; see above)
 - Optimizer: COBYLA (gradient-free), best of 5 seeds, stopped before barren plateau (~150 effective iters vs. paper's 200)
 - Loss: MSE between `<Z0>` expectation value and target labels `{-1, +1}`
 - Classification: `<Z0> > 0 → AML`, else Healthy
