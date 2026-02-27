@@ -479,7 +479,7 @@ def train_vqc(X_train, y_train, X_test, y_test, max_iterations=200):
 
     print("  Method: Qiskit VQC (PAPER-EXACT - 200 COBYLA iterations)")
     print("  Feature map: ZZFeatureMap (4 qubits, 2 reps, full entanglement)")
-    print("  Ansatz: RealAmplitudes (2 reps, 12 parameters; paper states 8 but reps=1 gives ~65%)")
+    print("  Ansatz: RealAmplitudes (2 reps, full entanglement)")
     print("  Optimizer: COBYLA, %d iterations (paper-stated), best of 5 seeds" % max_iterations)
 
     best_acc = 0

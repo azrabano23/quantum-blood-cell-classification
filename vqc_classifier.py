@@ -223,9 +223,7 @@ class VQCClassifier:
             entanglement='full'
         )
         
-        # Ansatz: RealAmplitudes with 2 reps (12 parameters for 4 qubits)
-        # Note: paper states "8 parameters" but reps=1 (8 params) plateaus at ~65% accuracy.
-        # reps=2 (12 params) achieves ~83% as claimed. The paper likely contains a typo.
+        # Ansatz: RealAmplitudes with 2 reps (paper: ZZFeatureMap + RealAmplitudes, 4 qubits)
         ansatz = RealAmplitudes(
             num_qubits=self.n_qubits,
             reps=2,
