@@ -10,7 +10,7 @@ Two-stage approach (quantum transfer learning):
            → angle projection (Linear(512→4) → Tanh → ×π)
            → 4-qubit quantum circuit (AngleEmbedding + BasicEntanglerLayers, 8 params)
            → post-quantum classifier (Linear(4→2))
-           Trained with parameter-shift gradients.
+           Trained with adjoint gradients (lightning.qubit, supports batching).
 
 Why two-stage:
   End-to-end training fails because randomly-initialized BasicEntanglerLayers
@@ -47,7 +47,7 @@ N_QUBITS = 4
 dev = qml.device('lightning.qubit', wires=N_QUBITS)
 
 
-@qml.qnode(dev, interface='torch', diff_method='parameter-shift')
+@qml.qnode(dev, interface='torch', diff_method='adjoint')
 def quantum_circuit(inputs, weights):
     """4-qubit circuit: AngleEmbedding + BasicEntanglerLayers (2 layers, 8 params)."""
     qml.AngleEmbedding(inputs, wires=range(N_QUBITS), rotation='Y')
