@@ -583,6 +583,16 @@ def run_all_experiments():
     )
     print(f"  EP/VQC split — Train: {len(y_feat_train_50)}, Test: {len(y_feat_test_50)}")
 
+    # --- Load 50-sample images (Hybrid QNN small) ---
+    print("\n[D] Loading images for Hybrid QNN (50 samples/class, seed=42)...")
+    X_img_50, y_img_50, counts_img_50 = load_dataset(DATASET_PATH, 50, mode='images', seed=42)
+    X_img_50 = X_img_50[:, np.newaxis, :, :]
+    print(f"  {len(X_img_50)} images: Healthy={counts_img_50['healthy']}, AML={counts_img_50['aml']}")
+    X_img_train_50, X_img_test_50, y_img_train_50, y_img_test_50 = train_test_split(
+        X_img_50, y_img_50, test_size=0.2, random_state=42, stratify=y_img_50
+    )
+    print(f"  Hybrid QNN 50 split — Train: {len(y_img_train_50)}, Test: {len(y_img_test_50)}")
+
     # ------------------------------------------------------------------ CNN ---
     print("\n" + "="*80)
     print("[CNN] Training - Target: 98.4%  (250 samples/class)")
@@ -634,12 +644,43 @@ def run_all_experiments():
     results['vqc'] = {'accuracy': float(vqc_acc), 'time': vqc_time,
                       'samples_per_class': 50}
 
+    # --------------------------------------------------------------- Hybrid QNN ---
+    from hybrid_qnn import train_hybrid_qnn as _train_hybrid_qnn
+
+    print("\n" + "="*80)
+    print("[Hybrid QNN] Training — novel 5th method (250 images/class)")
+    print("="*80)
+    start = time.time()
+    hqnn_preds_250, hqnn_acc_250 = _train_hybrid_qnn(
+        X_img_train, y_img_train, X_img_test, y_img_test,
+        epochs=200, batch_size=16, label='250/class'
+    )
+    hqnn_time_250 = time.time() - start
+    print(f"\nHybrid QNN (250/class) Final Accuracy: {hqnn_acc_250:.1%}")
+    results['hybrid_qnn_250'] = {
+        'accuracy': float(hqnn_acc_250), 'time': hqnn_time_250, 'samples_per_class': 250
+    }
+
+    print("\n" + "="*80)
+    print("[Hybrid QNN] Training — novel 5th method (50 images/class)")
+    print("="*80)
+    start = time.time()
+    hqnn_preds_50, hqnn_acc_50 = _train_hybrid_qnn(
+        X_img_train_50, y_img_train_50, X_img_test_50, y_img_test_50,
+        epochs=200, batch_size=8, label='50/class'
+    )
+    hqnn_time_50 = time.time() - start
+    print(f"\nHybrid QNN (50/class) Final Accuracy: {hqnn_acc_50:.1%}")
+    results['hybrid_qnn_50'] = {
+        'accuracy': float(hqnn_acc_50), 'time': hqnn_time_50, 'samples_per_class': 50
+    }
+
     # ------------------------------------------------------------ Summary ---
     print("\n" + "="*80)
     print("FINAL RESULTS vs PAPER (arXiv:2601.18710)")
     print("="*80)
-    print(f"\n{'Model':<12} {'Samples':<10} {'Target':<10} {'Achieved':<10} {'Status'}")
-    print("-"*58)
+    print(f"\n{'Model':<18} {'Samples':<10} {'Target':<10} {'Achieved':<10} {'Status'}")
+    print("-"*64)
 
     targets = {'cnn': 0.984, 'dense_nn': 0.92, 'ep': 0.864, 'vqc': 0.83}
     for model, target in targets.items():
@@ -647,7 +688,13 @@ def run_all_experiments():
         spc = results[model]['samples_per_class']
         diff = achieved - target
         status = "PASS" if diff >= -0.05 else "FAIL"
-        print(f"{model.upper():<12} {spc:<10} {target:.1%}      {achieved:.1%}      {status} ({diff:+.1%})")
+        print(f"{model.upper():<18} {spc:<10} {target:.1%}      {achieved:.1%}      {status} ({diff:+.1%})")
+
+    # Hybrid QNN (novel extension)
+    for key, lbl in [('hybrid_qnn_250', '250/class'), ('hybrid_qnn_50', '50/class')]:
+        achieved = results[key]['accuracy']
+        spc = results[key]['samples_per_class']
+        print(f"{'HYBRID QNN ('+lbl+')':<18} {spc:<10} {'N/A (novel)':<10} {achieved:.1%}")
 
     with open('results_verified.json', 'w') as f:
         json.dump(results, f, indent=2)
