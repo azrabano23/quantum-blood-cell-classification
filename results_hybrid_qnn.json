@@ -1,0 +1,10 @@
+{
+  "hybrid_qnn_250": {
+    "accuracy": 0.94,
+    "samples_per_class": 250
+  },
+  "hybrid_qnn_50": {
+    "accuracy": 0.6,
+    "samples_per_class": 50
+  }
+}
