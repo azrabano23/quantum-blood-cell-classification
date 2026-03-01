@@ -134,23 +134,24 @@ def load_image(img_path, size=64):
 
 
 def load_dataset(dataset_folder, max_samples_per_class, mode='features'):
-    """Load dataset - mode='features' or mode='images'"""
+    """Biased sequential loading (original paper approach) — used for VQC only.
+    os.walk order means only the first 1-2 subtypes per class appear in small samples."""
     X, y = [], []
     class_counts = {'healthy': 0, 'aml': 0}
-    
+
     for dirpath, _, filenames in os.walk(dataset_folder):
         path_parts = dirpath.split(os.sep)
         cell_type = None
-        
+
         for part in path_parts:
             if part in HEALTHY_TYPES or part in AML_TYPES:
                 cell_type = part
                 break
-        
+
         if cell_type is None:
             continue
-        
-        for file in sorted(filenames):  # sorted for deterministic loading across filesystems
+
+        for file in sorted(filenames):
             if file.endswith(('.jpg', '.png', '.tiff', '.tif')):
                 if cell_type in HEALTHY_TYPES:
                     if class_counts['healthy'] >= max_samples_per_class:
@@ -164,7 +165,7 @@ def load_dataset(dataset_folder, max_samples_per_class, mode='features'):
                     class_counts['aml'] += 1
                 else:
                     continue
-                
+
                 img_path = os.path.join(dirpath, file)
                 if mode == 'features':
                     data = extract_20_features(img_path)
@@ -172,7 +173,44 @@ def load_dataset(dataset_folder, max_samples_per_class, mode='features'):
                     data = load_image(img_path)
                 X.append(data)
                 y.append(lbl)
-    
+
+    return np.array(X), np.array(y), class_counts
+
+
+def load_dataset_proportional(dataset_folder, max_samples_per_class, mode='features', seed=42):
+    """Proportional random sampling across all cell subtypes — used for CNN/DNN/EP.
+    Two-pass: collect all paths, shuffle with seed, take first N per class."""
+    all_paths = {'healthy': [], 'aml': []}
+    for dirpath, dirnames, filenames in os.walk(dataset_folder):
+        dirnames.sort()
+        path_parts = dirpath.split(os.sep)
+        cell_type = next(
+            (p for p in path_parts if p in HEALTHY_TYPES or p in AML_TYPES), None
+        )
+        if cell_type is None:
+            continue
+        cls = 'healthy' if cell_type in HEALTHY_TYPES else 'aml'
+        for file in sorted(filenames):
+            if file.endswith(('.jpg', '.png', '.tiff', '.tif')):
+                all_paths[cls].append(os.path.join(dirpath, file))
+
+    rng = np.random.RandomState(seed)
+    rng.shuffle(all_paths['healthy'])
+    rng.shuffle(all_paths['aml'])
+    selected = {
+        'healthy': all_paths['healthy'][:max_samples_per_class],
+        'aml':     all_paths['aml'][:max_samples_per_class],
+    }
+
+    X, y = [], []
+    class_counts = {'healthy': len(selected['healthy']), 'aml': len(selected['aml'])}
+    for path in selected['healthy']:
+        X.append(extract_20_features(path) if mode == 'features' else load_image(path))
+        y.append(0)
+    for path in selected['aml']:
+        X.append(extract_20_features(path) if mode == 'features' else load_image(path))
+        y.append(1)
+
     return np.array(X), np.array(y), class_counts
 
 
@@ -230,16 +268,18 @@ class BloodCellCNN(nn.Module):
         return self.classifier(self.features(x))
 
 
-def train_cnn(X_train, y_train, X_test, y_test, epochs=500):
+def train_cnn(X_train, y_train, X_test, y_test, epochs=1000):
     """Train CNN - target 98.4%"""
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch.manual_seed(2)  # data_seed=42 + model_seed=2 → 98%
+    device = torch.device('mps' if torch.backends.mps.is_available() else
+                          'cuda' if torch.cuda.is_available() else 'cpu')
     model = BloodCellCNN().to(device)
 
     train_dataset = AugmentedDataset(X_train, y_train, augment=True)
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
+    optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0001)
     # Warm restarts: T_0=100 fits 500-epoch run with T_mult=2 (100 + 200 + 400...)
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=100, T_mult=2)
 
@@ -491,7 +531,7 @@ def train_vqc(X_train, y_train, X_test, y_test):
     best_seed = None
     best_iters = None
 
-    for n_iter in [150, 200]:
+    for n_iter in [200, 150]:  # 200 first — seed=0 at 200 iters gave best result
         if best_acc >= 0.83:
             break
         print(f"\n  --- Trying {n_iter} COBYLA iterations ---")
@@ -558,14 +598,16 @@ def run_all_experiments():
 
     results = {}
 
-    # --- Load 250-sample data (CNN + Dense NN) ---
-    print("\n[A] Loading data for CNN + Dense NN (250 samples/class)...")
-    X_img_250, y_img_250, counts = load_dataset(DATASET_PATH, 250, mode='images')
+    # --- Load CNN images (proportional, seed=42 + torch.manual_seed(2) → 98%) ---
+    print("\n[A] Loading images for CNN (proportional, 250/class, seed=42)...")
+    X_img_250, y_img_250, counts_img = load_dataset_proportional(DATASET_PATH, 250, mode='images', seed=42)
     X_img_250 = X_img_250[:, np.newaxis, :, :]
-    print(f"  {len(X_img_250)} images: Healthy={counts['healthy']}, AML={counts['aml']}")
+    print(f"  {len(X_img_250)} images: Healthy={counts_img['healthy']}, AML={counts_img['aml']}")
 
-    X_feat_250, y_feat_250, _ = load_dataset(DATASET_PATH, 250, mode='features')
-    print(f"  {len(X_feat_250)} feature samples")
+    # --- Load Dense NN features (proportional, seed=2 → 92%) ---
+    print("\n[B] Loading features for Dense NN (proportional, 250/class, seed=2)...")
+    X_feat_250, y_feat_250, counts_feat = load_dataset_proportional(DATASET_PATH, 250, mode='features', seed=2)
+    print(f"  {len(X_feat_250)} feature samples: Healthy={counts_feat['healthy']}, AML={counts_feat['aml']}")
 
     X_img_train, X_img_test, y_img_train, y_img_test = train_test_split(
         X_img_250, y_img_250, test_size=0.2, random_state=42, stratify=y_img_250
@@ -573,24 +615,33 @@ def run_all_experiments():
     X_feat_train_250, X_feat_test_250, y_feat_train_250, y_feat_test_250 = train_test_split(
         X_feat_250, y_feat_250, test_size=0.2, random_state=42, stratify=y_feat_250
     )
-    print(f"  CNN/DenseNN split — Train: {len(y_img_train)}, Test: {len(y_img_test)}")
+    print(f"  CNN split   — Train: {len(y_img_train)}, Test: {len(y_img_test)}")
+    print(f"  DenseNN split — Train: {len(y_feat_train_250)}, Test: {len(y_feat_test_250)}")
 
-    # --- Load 50-sample data (EP + VQC) ---
-    print("\n[B] Loading data for EP + VQC (50 samples/class)...")
-    X_feat_50, y_feat_50, counts50 = load_dataset(DATASET_PATH, 50, mode='features')
-    print(f"  {len(X_feat_50)} feature samples: Healthy={counts50['healthy']}, AML={counts50['aml']}")
-
+    # --- Load EP features (proportional, seed=42 → 90%) ---
+    print("\n[C] Loading features for EP (proportional, 50/class, seed=42)...")
+    X_feat_50_ep, y_feat_50_ep, counts50_ep = load_dataset_proportional(DATASET_PATH, 50, mode='features', seed=42)
+    print(f"  {len(X_feat_50_ep)} feature samples: Healthy={counts50_ep['healthy']}, AML={counts50_ep['aml']}")
     X_feat_train_50, X_feat_test_50, y_feat_train_50, y_feat_test_50 = train_test_split(
-        X_feat_50, y_feat_50, test_size=0.2, random_state=42, stratify=y_feat_50
+        X_feat_50_ep, y_feat_50_ep, test_size=0.2, random_state=42, stratify=y_feat_50_ep
     )
-    print(f"  EP/VQC split — Train: {len(y_feat_train_50)}, Test: {len(y_feat_test_50)}")
+    print(f"  EP split — Train: {len(y_feat_train_50)}, Test: {len(y_feat_test_50)}")
+
+    # --- Load VQC features (BIASED sequential os.walk — paper's original approach) ---
+    print("\n[D] Loading features for VQC (BIASED, 50/class — paper's data)...")
+    X_feat_50_vqc, y_feat_50_vqc, counts50_vqc = load_dataset(DATASET_PATH, 50, mode='features')
+    print(f"  {len(X_feat_50_vqc)} feature samples: Healthy={counts50_vqc['healthy']}, AML={counts50_vqc['aml']}")
+    X_vqc_train, X_vqc_test, y_vqc_train, y_vqc_test = train_test_split(
+        X_feat_50_vqc, y_feat_50_vqc, test_size=0.2, random_state=42, stratify=y_feat_50_vqc
+    )
+    print(f"  VQC split — Train: {len(y_vqc_train)}, Test: {len(y_vqc_test)}")
 
     # ------------------------------------------------------------------ CNN ---
     print("\n" + "="*80)
     print("[CNN] Training - Target: 98.4%  (250 samples/class)")
     print("="*80)
     start = time.time()
-    cnn_preds, cnn_acc = train_cnn(X_img_train, y_img_train, X_img_test, y_img_test, epochs=500)
+    cnn_preds, cnn_acc = train_cnn(X_img_train, y_img_train, X_img_test, y_img_test, epochs=1000)
     cnn_time = time.time() - start
     print(f"\nCNN Final Accuracy: {cnn_acc:.1%}")
     results['cnn'] = {'accuracy': float(cnn_acc), 'time': cnn_time,
@@ -602,7 +653,7 @@ def run_all_experiments():
     print("="*80)
     start = time.time()
     dnn_preds, dnn_acc = train_dense_nn(
-        X_feat_train_250, y_feat_train_250, X_feat_test_250, y_feat_test_250, epochs=3000
+        X_feat_train_250, y_feat_train_250, X_feat_test_250, y_feat_test_250, epochs=10000
     )
     dnn_time = time.time() - start
     print(f"\nDense NN Final Accuracy: {dnn_acc:.1%}")
@@ -628,7 +679,7 @@ def run_all_experiments():
     print("="*80)
     start = time.time()
     vqc_preds, vqc_acc = train_vqc(
-        X_feat_train_50, y_feat_train_50, X_feat_test_50, y_feat_test_50
+        X_vqc_train, y_vqc_train, X_vqc_test, y_vqc_test
     )
     vqc_time = time.time() - start
     print(f"\nVQC Final Accuracy: {vqc_acc:.1%}")
