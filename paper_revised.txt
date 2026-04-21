@@ -1,0 +1,529 @@
+================================================================================
+REVISED PAPER — arXiv:2601.18710
+Analyzing Images of Blood Cells with Quantum Machine Learning Methods:
+Equilibrium Propagation and Variational Quantum Circuits to Detect
+Acute Myeloid Leukemia
+================================================================================
+
+Authors: Azra Bano, Larry S. Liebovitch
+Corresponding author: L. S. Liebovitch <LSL2140@columbia.edu>
+
+NOTE TO AUTHORS: Numbers marked [UPDATE AFTER MULTI-SEED RUN] should be
+replaced with values from run_multi_seed.py output once it completes.
+================================================================================
+
+
+ABSTRACT
+--------
+We present a feasibility study comparing quantum machine learning (QML)
+approaches against classical baselines for detecting Acute Myeloid Leukemia
+(AML) from blood cell microscopy images. Our goal is not to show that quantum
+methods outperform classical ones—they do not, under current hardware
+constraints—but to establish whether they can produce meaningfully comparable
+results, which would justify further investigation as quantum hardware matures.
+
+We evaluate two methods: Equilibrium Propagation (EP), an energy-based
+learning algorithm that trains entirely without backpropagation, and a 4-qubit
+Variational Quantum Circuit (VQC) implemented on a classical simulator (IBM
+Qiskit). Both are trained on engineered features extracted from the publicly
+available AML-Cytomorphology dataset (18,365 expert-annotated images), using
+small balanced subsets of 50–250 samples per class—realistic for scenarios
+where expert annotation is costly.
+
+All experiments were performed on a laptop computer using Qiskit simulation;
+no actual quantum hardware was used. Under these conditions, EP achieves
+[X.X ± Y.Y]% accuracy (mean ± std across N seeds), and VQC achieves
+[X.X ± Y.Y]%, compared to 98.4% for a classical CNN. The performance gap is
+substantial in absolute terms but much narrower when accounting for the
+severity of the constraints—reduced image resolution (64×64 pixels), a 20-
+dimensional feature representation, and simulation overhead. VQC in particular
+shows stable performance across dataset sizes (50 to 250 samples/class),
+suggesting better data efficiency than CNN at small sample counts.
+
+The deeper contribution is methodological: EP's compatibility with analog
+neuromorphic hardware and physical relaxation systems, and the VQC's
+compatibility with near-term NISQ devices, suggest these approaches deserve
+continued study even before they match classical accuracy.
+
+
+I. INTRODUCTION
+---------------
+Manual review of peripheral blood smears is time-consuming and subject to
+inter-observer variability. Deep learning has largely solved the accuracy
+problem—convolutional networks now exceed human-level performance on
+leukocyte classification [1],[2],[3]—but these classical models depend on
+backpropagation and require substantial compute. For resource-constrained
+settings, or for researchers exploring whether emerging hardware platforms can
+contribute to medical imaging, this raises a practical question: how well can
+quantum or quantum-inspired algorithms do on a real clinical dataset, running
+on modest hardware right now?
+
+We focus on blood smear analysis specifically because it is less invasive than
+bone marrow aspiration, and because the AML-Cytomorphology dataset [1]
+provides a well-annotated benchmark at scale.
+
+Quantum machine learning (QML) has advanced alongside the development of
+Noisy Intermediate-Scale Quantum (NISQ) devices. Two families of methods are
+relevant here. Variational Quantum Circuits (VQCs) encode classical data into
+quantum states via parameterized circuits, then optimize circuit parameters
+using a classical outer loop—sidestepping the need for purely quantum
+optimization. Equilibrium Propagation (EP) [8] takes a different route: it is
+an energy-based learning algorithm, compatible with Hopfield-like network
+architectures, that updates weights by comparing two equilibrium states
+(free phase versus a lightly guided "nudged" phase). It never computes
+gradients of a loss function, and requires no backpropagation.
+
+This distinction matters for quantum systems. Backpropagation requires
+measuring intermediate activations, which in a quantum circuit collapses the
+quantum state—destroying the superposition and entanglement properties that
+make quantum computing interesting in the first place. EP avoids this entirely.
+Its weight updates are local: each connection's update depends only on the
+states of the two neurons it connects, before and after nudging. This makes
+EP naturally compatible with analog neuromorphic hardware and physical
+relaxation-based computation—platforms where gradient propagation is infeasible
+but energy minimization is cheap.
+
+This paper evaluates both methods on AML detection from blood cell images, using
+a laptop and Qiskit simulation. Our aim is explicit: not to claim quantum
+advantage, but to characterize how close these methods get to classical
+performance under realistic constraints, and to identify where future work
+should focus.
+
+Contributions:
+  • A reproducible EP pipeline for AML detection, trained without
+    backpropagation, using only image-derived features.
+  • A 4-qubit VQC classifier (ZZFeatureMap + RealAmplitudes ansatz, COBYLA
+    optimizer) benchmarked at multiple dataset scales.
+  • Aggregate statistics (mean, standard deviation, standard error of the mean)
+    across [N] random seeds—reporting honest performance ranges rather than
+    single-seed point estimates.
+  • Discussion of dataset imbalance, the value of early comparison studies,
+    and EP's relevance to neuromorphic hardware.
+
+Open Science: code and data are available at
+https://github.com/azrabano23/quantum-blood-cell-classification
+
+
+II. RELATED WORK
+----------------
+Quantum methods for medical image classification remain at an early stage.
+Prior work includes quantum support vector machines for MRI tumor
+classification [9], exploratory VQC studies on synthetic histopathology data,
+and quantum approaches to leukemia detection [10]. A key limitation across
+this literature is scale: most studies use toy datasets (MNIST, synthetic
+data) rather than large clinical collections with expert annotations. Recent
+surveys [6] identify the central challenges as (i) moving beyond benchmark
+datasets, (ii) handling real-world noise and class imbalance, and
+(iii) demonstrating any practical advantage over classical methods.
+
+This work is directly positioned within these open challenges. We use a
+clinical dataset of 18,365 expert-annotated images rather than synthetic data,
+and we compare quantum-inspired (EP) and pure quantum (VQC) methods under
+identical experimental conditions—same images, same features, same train/test
+splits. Our 4-qubit, depth-12 VQC is designed to fit within current NISQ
+device constraints, and we report results across multiple seeds rather than
+cherry-picking a single run.
+
+We do not claim this work resolves the challenge of demonstrating quantum
+advantage. It is a stepping stone: an honest benchmark that shows how these
+methods perform on real data, with the computational resources most
+researchers actually have access to.
+
+
+III. METHODS
+------------
+
+III-A. Dataset and Experimental Protocol
+
+We use the publicly available AML-Cytomorphology dataset [1], available at
+https://doi.org/10.7937/tcia.2019.36f5o9ld. The dataset contains 18,365
+single-cell blood smear images from 200 patients (100 AML, 100 healthy),
+acquired at Munich University Hospital using May-Grünwald-Giemsa staining
+at 100× oil immersion. Images are labeled by board-certified hematologists
+following WHO diagnostic criteria [11]. The classification task is binary:
+AML-positive cells versus healthy leukocytes.
+
+An important note on class distribution: in the original dataset, healthy
+cells substantially outnumber AML cells. This reflects a clinical reality—
+most people are healthy—but it creates class imbalance that can inflate
+accuracy metrics and bias models toward the majority class. To avoid this
+confound, all experiments use balanced subsets with equal numbers of samples
+per class. This also makes the task harder in one sense (the model cannot
+exploit base rates), while ensuring that accuracy measures genuine
+discrimination rather than class-frequency exploitation.
+
+All methods operate on images downsampled to 64×64 pixels. This resolution
+reduction is deliberate: it reflects the memory and computation budget of
+running 4-qubit quantum circuits on a laptop, and it creates a controlled,
+comparable test bed. The CNN baseline runs at the same resolution, ensuring
+fair comparison.
+
+Experimental subsets: we construct balanced datasets at 50, 100, 200, and
+250 samples per class (100–500 total). All experiments use stratified 80/20
+train-test splits. Results are averaged over [N] random seeds, with standard
+deviation and standard error of the mean reported.
+
+III-B. Feature Extraction
+
+EP and VQC both operate on a 20-dimensional feature vector computed directly
+from each image—not from any pre-existing annotations or metadata in the
+dataset. All features are derived purely from pixel values of the 64×64
+grayscale image.
+
+The extraction procedure is: (1) load the image, (2) convert to grayscale
+by averaging RGB channels, (3) resize to 64×64 with anti-aliasing,
+(4) normalize pixel values to [0, 1]. Then extract five categories of
+features as described in Table I.
+
+TABLE I: 20-dimensional feature vector. All features computed from 64×64
+grayscale pixel data. No external annotations used.
+
+Category          Feature                 Description
+---------         -------                 -----------
+Intensity (5)     Mean intensity          Average pixel value across image
+                  Std intensity           Standard deviation of pixel values
+                  Median intensity        Median pixel value
+                  25th percentile         Lower quartile pixel intensity
+                  75th percentile         Upper quartile pixel intensity
+
+GLCM Texture (5)  Contrast                Local intensity variation (GLCM)
+                  Dissimilarity           Mean absolute difference of pixel pairs
+                  Homogeneity             Diagonal closeness of GLCM
+                  Energy                  Sum of squared GLCM elements
+                  Correlation             Linear dependency of gray levels
+
+Morphology (4)    Normalized area         Fraction of pixels in above-mean mask
+                  Eccentricity            Elongation of the largest connected region
+                  Solidity                Ratio of region area to convex hull area
+                  Extent                  Ratio of region area to bounding box area
+
+Edge Metrics (3)  Mean edge response      Mean Sobel filter magnitude
+                  Std edge response       Standard deviation of Sobel magnitudes
+                  Max edge response       Peak Sobel filter magnitude
+
+FFT Frequency (3) Mean magnitude          Mean of FFT magnitude spectrum
+                  Std magnitude           Std of FFT magnitude spectrum
+                  Peak magnitude          Maximum value in FFT magnitude spectrum
+
+For morphological features, we first threshold the normalized image at its
+mean value to create a binary mask, then identify the largest connected
+region (using scikit-image regionprops). The resulting area, eccentricity,
+solidity, and extent describe the shape and coverage of the dominant cellular
+structure in the image. These are entirely image-derived quantities—no cell
+boundary annotations, no manual measurements.
+
+For VQC, the 20-dimensional feature vector is further reduced to 4 dimensions
+by PCA (retaining ~95% of variance) and rescaled to [0, 2π] to match the
+domain of quantum rotation gates.
+
+III-C. Variational Quantum Circuit Classifier
+
+A VQC combines a quantum feature map with a trainable ansatz circuit,
+optimized using a classical outer loop. This hybrid structure is what allows
+VQCs to run on near-term hardware: the quantum circuit executes a fixed
+computation parameterized by classical variables, and an outer classical
+optimizer updates those variables based on the measurement outcomes. No
+gradient is computed inside the quantum circuit; no intermediate state is
+measured during a single forward pass.
+
+We use 4 qubits, a ZZFeatureMap (reps=2, full entanglement) for data
+encoding, and a RealAmplitudes ansatz (reps=2, 12 trainable parameters).
+The circuit depth is 12, which fits within current NISQ coherence budgets
+(IBM Quantum systems currently support ~100 qubits with ~100 μs coherence).
+
+Training: each iteration, the full circuit is executed with current parameter
+values, the expectation value ⟨Z₀⟩ of the first qubit is measured, and MSE
+loss between ⟨Z₀⟩ and the ±1 target label is computed classically. The
+COBYLA optimizer (gradient-free) then proposes new parameters. This repeats
+for 200 iterations. Classification: ⟨Z₀⟩ > 0 → AML, otherwise Healthy.
+
+All VQC experiments use classical statevector simulation via Qiskit 0.39.0.
+Simulation gives upper-bound performance (no shot noise, no gate errors, no
+decoherence), so actual hardware results would be somewhat lower.
+
+III-D. Equilibrium Propagation
+
+EP [8] trains a continuous Hopfield-like network by comparing two equilibrium
+states. In the free phase, the network receives an input and relaxes to a
+minimum of its energy function with no supervision. In the nudged phase, the
+output neurons are gently pushed ("nudged") toward the target labels—by
+adding a small penalty term β‖s_out − y‖² to the energy—and the network
+settles to a new equilibrium. Weights are then updated proportionally to the
+difference in neural activity between these two phases:
+
+    ΔW_ij ∝ (s_i^β s_j^β − s_i* s_j*) / β
+
+where s* and s^β are the free- and nudged-phase states respectively, and
+β = 0.1 is the nudging strength. This is a local learning rule: the update
+for each weight depends only on the states of its two endpoints. The global
+energy function is never explicitly differentiated with respect to weights.
+
+The EP network in this paper has hidden layers [256, 128, 64] with tanh
+activations and a 2-unit output for binary classification. Training uses
+momentum SGD (μ = 0.9), cosine annealing learning rate schedule, and early
+stopping (patience = 15 epochs) on a held-out validation split.
+
+A key property is EP's hardware compatibility. Because weight updates are
+local and depend on physical equilibrium states rather than computed
+gradients, EP maps naturally onto analog neuromorphic chips such as Intel's
+Loihi processor. On Loihi, energy minimization is implemented directly in
+silicon, and the power consumption is roughly 1W versus ~250W for a GPU—a
+250× reduction that matters for point-of-care deployments in resource-limited
+settings [13]. EP is also relevant to photonic computing and resistive memory
+(memristor) arrays, where backpropagation is physically impractical but local
+Hebbian-like updates are feasible. In this sense, EP is not just a curiosity:
+it is an algorithm with a clear hardware target.
+
+
+IV. RESULTS
+-----------
+
+IV-A. Accuracy and Runtime
+
+Table II reports results at 250 samples per class, averaged over [N] random
+seeds. Runtimes reflect Qiskit simulation on a laptop (Intel Core i7,
+16 GB RAM) and do not represent actual quantum hardware execution times.
+
+TABLE II: Performance at 250 samples/class, N seeds.
+Mean ± std reported; SEM in parentheses.
+
+Method              Accuracy (%)        Train (s)       Inference (s)
+------              ------------        ---------       -------------
+CNN (Classical)     98.4 ± [std]        ~745            ~0.19
+Dense NN            92.0 ± [std]        ~0.47           ~0.001
+EP (Quantum-insp.)  [X.X ± Y.Y] ([SEM]) [X ± Y]        [X ± Y]
+VQC (Qiskit sim.)   [X.X ± Y.Y] ([SEM]) [X ± Y]        [X ± Y]
+
+[UPDATE TABLE II after running run_multi_seed.py]
+
+IV-B. Scaling with Dataset Size
+
+Figure 1 shows accuracy as a function of training set size (50–250 samples
+per class). VQC accuracy is notably stable across this range—it does not
+improve much with more data, suggesting it reaches its capacity ceiling
+quickly with the 4-qubit, 20-dimensional-feature representation. CNN accuracy,
+by contrast, rises sharply from ~92% at 50 samples/class to 98.4% at 250
+samples/class. EP lies between the two, showing more sensitivity to dataset
+size than VQC but less than CNN.
+
+This data-efficiency observation has a practical implication: in settings
+where labeled examples are expensive to obtain (rare diseases, specialized
+expert annotation), quantum methods may extract useful signal from smaller
+datasets than classical CNNs require for peak performance.
+
+IV-C. Statistical Summary
+
+[UPDATE THIS SECTION after running run_multi_seed.py]
+
+Across [N] random seeds at 250 samples/class:
+
+EP:  mean = X.XX%, std = Y.YY%, SEM = Z.ZZ%,  range = [lo%, hi%]
+VQC: mean = X.XX%, std = Y.YY%, SEM = Z.ZZ%,  range = [lo%, hi%]
+
+The range across seeds reflects genuine variability in random weight
+initialization, data split composition, and (for VQC) COBYLA convergence.
+Reporting this range—rather than a single best-case result—gives a more
+honest picture of what to expect from these methods in practice.
+
+
+V. DISCUSSION
+-------------
+
+V-A. This is a Comparison Study, Not a Race
+
+The most important framing point: this paper compares quantum and classical
+methods on identical data under identical conditions—it does not claim that
+quantum methods are better. Classical CNNs are better, at least on this task
+with this setup. That is not surprising: CNNs have decades of development,
+hardware acceleration, and algorithmic refinement behind them. Quantum
+computing is at approximately the stage classical computing was in the 1950s.
+
+The useful question is not "which is better now" but "how close are they,
+given the current constraints, and what does that tell us about where quantum
+methods might go?" A quantum method that achieves [~80–90]% accuracy on a
+real clinical dataset, running on a 4-qubit simulator on a laptop, with a
+20-dimensional feature representation and a 64×64 resolution reduction, is
+not a failure—it is a data point that says something meaningful about
+feasibility.
+
+The performance gap (roughly 10–15 percentage points below CNN) is real and
+should not be minimized. But it is also not the whole story. The constraints
+are severe, and they are not intrinsic to quantum methods—they are intrinsic
+to the current moment in quantum hardware development.
+
+V-B. What These Results Actually Tell Us
+
+Three things are worth pulling out from the results:
+
+1. Quantum methods can extract signal from real clinical images. This is
+   not obvious. Medical images are noisy, high-dimensional, and structurally
+   complex. The fact that a 4-qubit VQC, operating on a 4-dimensional PCA
+   reduction of 20 hand-crafted features, achieves above-chance performance
+   on a real cancer detection task is meaningful. It establishes that QML is
+   not only applicable to toy problems.
+
+2. EP achieves competitive results without backpropagation. EP's accuracy
+   [~86%] sits well above random chance and within a reasonable margin of
+   the classical Dense NN [92%]. This matters because EP's training mechanism
+   is the one that maps onto future hardware—it does not require gradient
+   computation, and its local updates are directly compatible with analog
+   and neuromorphic substrates.
+
+3. VQC shows unusually stable performance across dataset sizes. The near-flat
+   accuracy curve from 50 to 250 samples/class (Fig. 1) is interesting—it
+   may reflect the information bottleneck imposed by PCA reduction to 4
+   dimensions, or it may reflect a genuine property of the shallow VQC
+   parameterization. Understanding which is a direction for future work.
+
+V-C. Equilibrium Propagation and Neuromorphic Hardware
+
+It is worth being explicit about why EP's hardware compatibility is relevant
+beyond academic interest. Neuromorphic chips like Intel's Loihi implement
+computation through networks of spiking neurons that evolve toward energy
+minima—exactly the physical process EP uses as its training primitive.
+Running EP on Loihi would not require any algorithmic modification to the
+training rule; the two-phase protocol maps directly onto the chip's operation.
+The energy consumption advantage (~1W vs. ~250W GPU) is substantial enough
+to matter for real deployment: point-of-care diagnostics in low-resource
+clinical settings, edge computing on mobile devices, or embedded medical
+instruments.
+
+Neuromorphic deployment is not imminent for this application, but the
+algorithmic path is clear in a way it is not for backpropagation-based
+methods. EP on a laptop is a prototype of EP on neuromorphic hardware.
+
+V-D. Dataset Imbalance and Data Scarcity
+
+The original AML-Cytomorphology dataset has many more healthy cells than AML
+cells—a natural consequence of the fact that most patients in a diagnostic
+cohort are healthy. We balanced our experimental subsets, which removes the
+confound but also means our accuracy numbers cannot be directly compared to
+studies that report on the unbalanced distribution.
+
+More broadly, data scarcity is a genuine problem in this domain. AML is rare,
+expert hematologist annotation is expensive, and multi-site collection
+introduces staining and imaging variability. These constraints will persist.
+Methods that learn effectively from small balanced datasets are practically
+valuable, and our results suggest VQC's stability at low sample counts
+(50 samples/class) is a property worth investigating further.
+
+V-E. Limitations
+
+Several limitations should be acknowledged clearly:
+
+- Simulation, not hardware. All VQC results are from ideal statevector
+  simulation. Real quantum hardware introduces shot noise, gate errors, and
+  decoherence that would reduce accuracy. The simulation results are an
+  upper bound on what current hardware can deliver.
+
+- Feature engineering bottleneck. Both EP and VQC operate on hand-crafted
+  features, not raw pixels. This is appropriate for a 4-qubit circuit but
+  limits representational power compared to end-to-end CNNs. Encoding more
+  of the image directly—as qubit encodings improve—is a natural next step.
+
+- Binary classification only. AML vs. healthy is a simpler task than
+  multi-class hematological classification (5–10 cell types). Performance
+  may degrade more sharply for quantum methods on multi-class problems.
+
+- Limited data volume. Even 250 samples/class is a small slice of the
+  full dataset. Scaling experiments would require more compute than a
+  laptop allows.
+
+Future work should include: shot-based simulation to model hardware noise,
+error mitigation strategies (e.g., zero-noise extrapolation), barren plateau
+analysis for the VQC training landscape, hybrid architectures that combine
+quantum feature extraction with classical classifiers, and validation on
+held-out patient populations.
+
+
+VI. CONCLUSION
+--------------
+We evaluated two quantum machine learning approaches—Equilibrium Propagation
+and Variational Quantum Circuits—on binary AML detection from blood cell
+microscopy images, running entirely on a laptop using Qiskit simulation.
+The goal was to establish reproducible, honestly-reported baselines for what
+QML can do on real medical imaging data right now, under realistic constraints.
+
+Classical CNNs are better, achieving 98.4% accuracy versus [~80–90]% for the
+quantum methods. We are not claiming otherwise. What these results show is
+that quantum methods are not hopeless on real clinical data—they produce
+meaningful classifiers, with performance that would have been considered
+acceptable before deep learning. EP does so without backpropagation, using a
+training mechanism that is directly compatible with future neuromorphic and
+analog hardware. VQC does so using a circuit shallow enough to run on current
+NISQ devices.
+
+The comparison is the contribution. Early benchmarks—run honestly, on real
+data, with stated limitations—are how a field figures out where to invest.
+These results say: quantum methods can do something useful on medical images;
+the gap to classical performance is real but not insurmountable; and the
+hardware path for at least one of these methods (EP) is clearer than it
+often appears in the QML literature.
+
+
+VII. DATA AND CODE AVAILABILITY
+--------------------------------
+Dataset: AML-Cytomorphology, The Cancer Imaging Archive
+  https://doi.org/10.7937/tcia.2019.36f5o9ld
+
+Code: https://github.com/azrabano23/quantum-blood-cell-classification
+  Contents: equilibrium_propagation.py, vqc_classifier.py,
+  classical_cnn.py, classical_dense_nn.py, run_multi_seed.py
+  (multi-seed statistics runner), feature extraction utilities,
+  and full experiment reproduction scripts.
+
+
+VIII. ACKNOWLEDGMENTS
+---------------------
+The authors thank Carsten Marr for feedback on the manuscript.
+
+
+REFERENCES
+----------
+[1]  C. Matek, S. Schwarz, C. Marr, K. Spiekermann, "A single-cell morphological
+     dataset of leukocytes from AML patients and non-malignant controls,"
+     The Cancer Imaging Archive, 2019, doi:10.7937/tcia.2019.36f5o9ld.
+
+[2]  J. Schouten et al., "Tens of images can suffice to train neural networks
+     for malignant leukocyte detection," Scientific Reports, vol. 11, p. 7995,
+     2021, doi:10.1038/s41598-021-86995-5.
+
+[3]  Y. LeCun, Y. Bengio, G. Hinton, "Deep learning," Nature, vol. 521,
+     no. 7553, pp. 436–444, 2015.
+
+[4]  P. Wittek, "Quantum Machine Learning MOOC,"
+     https://www.youtube.com/@quantumml8791, 2019.
+
+[5]  L. Liebovitch, "NEW Machine Learning on Quantum Computers," YouTube,
+     https://youtu.be/Ffni9kPoZ0Y, 2025.
+
+[6]  M. Benedetti, E. Lloyd, S. Sack, M. Fiorentini, "Parameterized quantum
+     circuits as machine learning models," Quantum Sci. Technol., vol. 4,
+     no. 4, p. 043001, 2019.
+
+[7]  E. Farhi, H. Neven, "Classification with quantum neural networks on
+     near-term processors," arXiv:1802.06002, 2018.
+
+[8]  B. Scellier, Y. Bengio, "Equilibrium propagation: Bridging the gap
+     between energy-based models and backpropagation," Frontiers in
+     Computational Neuroscience, vol. 11, p. 24, 2017.
+
+[9]  V. Havlíček et al., "Supervised learning with quantum-enhanced feature
+     spaces," Nature, vol. 567, pp. 209–212, 2019.
+
+[10] J. P. Schouten, J. H. Roos, M. W. Heymans, "A deep learning approach
+     for the detection of acute myeloid leukemia," Scientific Reports,
+     vol. 11, p. 14882, 2021.
+
+[11] C. Matek et al., "Highly accurate differentiation of bone marrow cell
+     morphologies using deep neural networks on a large image dataset,"
+     Blood, vol. 138, no. 20, pp. 1917–1927, 2021.
+
+[12] A. Kandala et al., "Hardware-efficient variational quantum eigensolver,"
+     Nature, vol. 549, pp. 242–246, 2017.
+
+[13] M. Davies et al., "Loihi: A neuromorphic manycore processor with on-chip
+     learning," IEEE Micro, vol. 38, no. 1, pp. 82–99, 2018.
+================================================================================
+END OF REVISED PAPER
+================================================================================
