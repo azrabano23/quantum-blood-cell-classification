@@ -15,7 +15,7 @@ Paper: arXiv:2601.18710
 Reference: Scellier & Bengio (2017). Equilibrium propagation: Bridging the gap
 between energy-based models and backpropagation. Frontiers in Computational Neuroscience.
 
-Author: A. Zrabano
+Author: Azra Bano
 """
 
 import numpy as np
@@ -568,4 +568,6 @@ if __name__ == "__main__":
         print("Or set AML_DATASET_PATH environment variable")
         sys.exit(1)
     else:
-        results = run_experiment(dataset_path, sample_sizes=[50, 100, 200, 250])
+        # EP can handle larger datasets — no quantum circuit bottleneck
+        # Using more data shows EP's true capability vs classical Dense NN
+        results = run_experiment(dataset_path, sample_sizes=[50, 100, 250, 500, 1000, 2000])

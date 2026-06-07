@@ -14,7 +14,7 @@ Paper-exact parameters used:
 Usage:
     python run_paper_exact.py [dataset_path]
 
-Author: A. Zrabano
+Author: Azra Bano
 """
 
 import numpy as np

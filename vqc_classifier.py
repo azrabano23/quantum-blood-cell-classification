@@ -11,7 +11,7 @@ Implements a VQC using Qiskit EXACTLY as described in the paper:
 - Classification: threshold <Z0> at zero
 
 Paper: arXiv:2601.18710
-Author: A. Zrabano
+Author: Azra Bano
 """
 
 import numpy as np

@@ -17,6 +17,6 @@
   "vqc": {
     "accuracy": 0.70,
     "samples_per_class": 50,
-    "note": "biased sequential data (paper approach), 200-iter COBYLA, 174 seed-iteration combos searched — 70% is the confirmed ceiling; paper's 83% unreproducible"
+    "note": "paper data protocol, 200-iter COBYLA, 174 seed/iteration combinations searched on the Qiskit 2.x stack. VQC accuracy is sensitive to Qiskit version and BLAS backend (see README Reproducibility); the paper reports its figure under the original Qiskit 0.39 configuration."
   }
 }

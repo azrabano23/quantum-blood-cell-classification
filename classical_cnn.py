@@ -14,7 +14,7 @@ Architecture:
 - Optimizer: Adam
 - Loss: Cross-entropy
 
-Author: A. Zrabano
+Author: Azra Bano
 """
 
 import numpy as np
@@ -384,4 +384,6 @@ if __name__ == "__main__":
     if not os.path.exists(dataset_path):
         print(f"Dataset not found at: {dataset_path}")
     else:
-        results = run_experiment(dataset_path, sample_sizes=[50, 100, 200, 250])
+        # Use full dataset — CNN can handle thousands of images
+        # The dataset has ~3000+ samples per class; using all of them
+        results = run_experiment(dataset_path, sample_sizes=[250, 500, 1000, 2000, 3000])

@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the paper below."
+title: "Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia"
+authors:
+  - family-names: Bano
+    given-names: Azra
+    affiliation: Rutgers University
+  - family-names: Liebovitch
+    given-names: Larry S.
+    affiliation: Columbia University
+date-released: 2026-01-01
+identifiers:
+  - type: other
+    value: "arXiv:2601.18710"
+    description: arXiv preprint
+url: "https://arxiv.org/abs/2601.18710"
+preferred-citation:
+  type: article
+  title: "Analyzing Images of Blood Cells with Quantum Machine Learning Methods: Equilibrium Propagation and Variational Quantum Circuits to Detect Acute Myeloid Leukemia"
+  authors:
+    - family-names: Bano
+      given-names: Azra
+    - family-names: Liebovitch
+      given-names: Larry S.
+  year: 2026
+  journal: "arXiv preprint arXiv:2601.18710"

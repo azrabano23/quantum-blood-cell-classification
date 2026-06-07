@@ -1,0 +1,17 @@
+{
+  "cnn": {
+    "accuracy": 0.97,
+    "time": 829.843169927597,
+    "samples_per_class": 250
+  },
+  "dense_nn": {
+    "accuracy": 0.89,
+    "time": 284.01482486724854,
+    "samples_per_class": 250
+  },
+  "ep": {
+    "accuracy": 0.9,
+    "time": 7.737689256668091,
+    "samples_per_class": 50
+  }
+}
