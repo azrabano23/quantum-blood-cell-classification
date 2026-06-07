@@ -11,9 +11,9 @@ Reference implementation for:
 > Azra Bano, Larry S. Liebovitch — Rutgers University & Columbia University
 > [arXiv:2601.18710](https://arxiv.org/abs/2601.18710)
 
-This is a feasibility study, and the framing is deliberately conservative. The question is not whether quantum methods *beat* a convolutional network — they do not — but whether two learning paradigms that **never invoke backpropagation** (an energy-based network and a 4-qubit variational circuit) can reach accuracy within a small, characterized margin of a tuned CNN on real clinical images, and do so under data scarcity. They can. The result worth a reader's attention is *data efficiency*, and the methodological contribution is treating reproducibility — especially of the variational circuit — as a first-class object rather than a footnote.
+This is a feasibility study, and the framing is deliberately conservative. The question is not whether quantum methods *beat* a convolutional network — they do not — but whether two learning paradigms that **never invoke backpropagation** (an energy-based network and a 4-qubit variational circuit) can reach accuracy within a characterized margin of a tuned CNN on real clinical images, and do so under data scarcity. They can — the gap to the CNN is real (~10–15 points), but narrow given the constraints. The result worth a reader's attention is *data efficiency*, and the methodological contribution is treating reproducibility — especially of the variational circuit — as a first-class object rather than a footnote.
 
-All four methods operate on the same 64×64 inputs and the same train/test protocol, so the comparison is controlled. Everything below matches the published paper; runtimes and accuracies are reproduced verbatim from Table I.
+All four methods operate on the same 64×64 inputs and the same train/test protocol, so the comparison is controlled. The numbers and framing below follow the paper [arXiv:2601.18710]; the variational-circuit accuracy in particular is configuration-sensitive and is reported there rather than pinned here.
 
 ---
 
@@ -25,12 +25,12 @@ Binary classification (AML vs. healthy), 250 samples per class, averaged over 3 
 |--------|:--------:|---------:|------:|-----:|
 | CNN (classical) | yes | **98.4%** | 745 s | 0.19 s |
 | Dense NN (classical) | yes | **92.0%** | 0.47 s | 0.001 s |
-| **Equilibrium Propagation** (quantum-inspired) | **no** | **86.4%** | 89.4 s | 0.13 s |
+| **Equilibrium Propagation** (quantum-inspired) | **no** | **≈86%** | 89.4 s | 0.13 s |
 | 4-qubit VQC (quantum, Qiskit sim) | no | *see paper* † | 180 s | 1.0 s |
 
-**Equilibrium Propagation reaches 86.4% — only ~12% below the CNN — with no gradient signal anywhere in training.** It sits between the dense baseline (92.0%) and the variational circuit, which is the interesting place for an energy-based method to land: it shows a local, two-phase learning rule is competitive with gradient descent on real clinical data.
+**Equilibrium Propagation reaches ~86% — within a reasonable margin of the dense baseline (92.0%) and roughly 12 points below the CNN — with no gradient signal anywhere in training.** That a local, two-phase learning rule gets this close to gradient descent on real clinical data is the point: it shows energy-based learning is viable here, and EP's local updates are exactly what map onto neuromorphic and analog hardware (see [Methods](#equilibrium-propagation-equilibrium_propagationpy)).
 
-**The data-efficiency story is the headline.** The CNN needs the full 250 samples/class to reach 98.4%; at 50 samples/class its accuracy falls to 92.0%. The quantum and quantum-inspired methods hold roughly constant accuracy across the 50→250 range (Fig. 2 in the paper) — i.e. they compete precisely in the regime where annotated data, not model capacity, is the bottleneck. For rare-disease imaging, where expert labels are the scarce resource, that is the property that matters.
+**The data-efficiency story is the headline.** The CNN climbs from ~92% at 50 samples/class to 98.4% at 250 — it needs the full dataset to reach its peak. The **VQC, by contrast, is notably stable** across the 50→250 range (Fig. 1 in the paper): it reaches its capacity ceiling almost immediately, which is precisely the low-data regime where it is interesting. EP sits between the two — more sensitive to dataset size than the VQC, less than the CNN. For rare-disease imaging, where expert labels are the scarce resource, that stability under data scarcity is the property that matters.
 
 † The VQC accuracy reported in the paper is omitted here intentionally. The variational result is acutely sensitive to software stack (see [Reproducibility](#reproducibility)); rather than print a single number, this repo ships the full multi-seed search that produced it (`run_multi_seed.py`) and the verified accuracies (`results_verified.json`). The reported figure is in [arXiv:2601.18710](https://arxiv.org/abs/2601.18710).
 
