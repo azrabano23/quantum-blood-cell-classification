@@ -144,3 +144,6 @@ data/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Internal pitch doc (contains collaborator contact info) — keep local
+IBM_2pager.md
